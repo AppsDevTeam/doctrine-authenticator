@@ -6,17 +6,24 @@ use Nette\Security\IIdentity;
 
 class FakeIdentity implements IIdentity
 {
-	private int $id;
+	/** @var array<string, mixed> */
+	private array $id;
 
 	private string $class;
 
-	public function __construct(int $id, string $class)
+	/**
+	 * @param array<string, mixed> $id
+	 */
+	public function __construct(array $id, string $class)
 	{
 		$this->id = $id;
 		$this->class = $class;
 	}
 
-	public function getId(): int
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function getId(): array
 	{
 		return $this->id;
 	}

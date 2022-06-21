@@ -4,10 +4,11 @@ namespace ADT\DoctrineAuthenticator;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Exception\ORMException;
+use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
 
-class DoctrineAuthenticator implements IdentityHandler
+abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
 	public function __construct(
 		private readonly EntityManagerInterface $em
