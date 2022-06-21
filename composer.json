@@ -1,0 +1,24 @@
+{
+	"name": "adt/doctrine-authenticator",
+	"type": "library",
+	"keywords": ["nette", "doctrine", "authenticator"],
+	"authors": [
+		{
+			"name": "Apps Dev Team",
+			"homepage": "https://www.appsdevteam.com",
+			"email": "hello@appsdevteam.com"
+		}
+	],
+	"description": "A Doctrine authenticator for Nette framework.",
+	"license": "MIT",
+	"require": {
+		"php": ">=8.1",
+		"nette/security": "^3.0",
+		"doctrine/orm": "^2.3"
+	},
+	"autoload": {
+		"psr-4": {
+			"ADT\\DoctrineAuthenticator\\": "src"
+		}
+	}
+}
