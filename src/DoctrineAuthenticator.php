@@ -10,9 +10,12 @@ use Nette\Security\IIdentity;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
-	public function __construct(
-		protected readonly EntityManagerInterface $em
-	) {}
+	protected readonly EntityManagerInterface $em;
+
+	public function __construct(EntityManagerInterface $em)
+	{
+		$this->em = $em;
+	}
 	
 	function sleepIdentity(IIdentity $identity): IIdentity
 	{
