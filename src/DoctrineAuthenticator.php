@@ -25,6 +25,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	}
 
 	/**
+	 * @param DoctrineAuthenticatorEntity $identity
 	 * @throws Exception
 	 */
 	function sleepIdentity(IIdentity $identity): IIdentity
