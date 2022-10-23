@@ -3,41 +3,48 @@
 namespace ADT\DoctrineAuthenticator;
 
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Exception\ORMException;
-use Doctrine\ORM\Proxy\Proxy;
+use Exception;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
+use Nette\Security\SimpleIdentity;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
-	protected readonly EntityManagerInterface $em;
-
-	public function __construct(EntityManagerInterface $em)
-	{
-		$this->em = $em;
-	}
-	
-	function sleepIdentity(IIdentity $identity): IIdentity
-	{
-		$class = $identity instanceof Proxy ? get_parent_class($identity) : get_class($identity);
-
-		if ($this->em->getMetadataFactory()->hasMetadataFor($class)) {
-			$identity = new FakeIdentity($this->em->getClassMetadata($class)->getIdentifierValues($identity), $class);
+	/**
+	 * @throws Exception
+	 */
+	public function __construct(
+		protected readonly string $className,
+		protected readonly string $fieldName,
+		protected readonly EntityManagerInterface $em
+	) {
+		if (! is_a($className, DoctrineAuthenticatorEntity::class, true)) {
+			throw new Exception("Class '$className' must implements 'DoctrineAuthenticatorEntity' interface!");
 		}
-
-		return $identity;
 	}
 
 	/**
-	 * @throws ORMException
+	 * @throws Exception
 	 */
-	function wakeupIdentity(IIdentity $identity): ?IIdentity
+	function sleepIdentity(IIdentity $identity): IIdentity
 	{
-		if ($identity instanceof FakeIdentity) {
-			return $this->em->getReference($identity->getClass(), $identity->getId());
+		if (! $identity instanceof $this->className) {
+			throw new Exception("Parameter 'identity' must be instance of '{$this->className}'!");
 		}
 
-		return $identity;
+		if (! $this->em->getMetadataFactory()->hasMetadataFor($this->className)) {
+			throw new Exception("Class '{$this->className}' has to be an entity!");
+		}
+
+		return new SimpleIdentity($identity->getAuthToken());
+	}
+
+	function wakeupIdentity(IIdentity $identity): ?IIdentity
+	{
+		/** @var DoctrineAuthenticatorEntity $entity */
+		$entity = $this->em->getRepository($this->className)->findOneBy([$this->fieldName => $identity->getId()]);
+
+		return $entity?->getAuthEntity();
 	}
 }
