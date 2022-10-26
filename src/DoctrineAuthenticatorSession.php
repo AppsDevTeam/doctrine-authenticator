@@ -4,8 +4,7 @@ namespace ADT\DoctrineAuthenticator;
 
 use Nette\Security\IIdentity;
 
-interface DoctrineAuthenticatorEntity extends IIdentity
+interface DoctrineAuthenticatorSession
 {
-	public function getAuthToken(): string;
 	public function getAuthEntity(): IIdentity;
 }
