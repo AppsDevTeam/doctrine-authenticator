@@ -89,12 +89,16 @@ class Authenticator extends DoctrineAuthenticator
 {
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
-		// your authentication belongs here
+		if (! $profile = $this->em->getRepository(Profile::class)->findBy(['email' => $email, 'password' => (new NS\Passwords)->hash($password)]) {
+			throw new NS\AuthenticationException('User not found');
+		}
 		
 		$session = new Session();
 		$session->setToken(Random::generate(32));
 		$session->setProfile($profile);
 		$this->em->flush();
+		
+		return $profile;
 	}
 }
 ```
@@ -136,7 +140,11 @@ class Authenticator extends DoctrineAuthenticator
 {
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
-		// your authentication belongs here
+		if (! $profile = $this->em->getRepository(Profile::class)->findBy(['email' => $email, 'password' => (new NS\Passwords)->hash($password)]) {
+			throw new NS\AuthenticationException('User not found');
+		}
+		
+		return $profile;
 	}
 }
 ```
