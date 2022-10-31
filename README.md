@@ -66,10 +66,35 @@ class User implements DoctrineAuthenticatorIdentity
 {
 	/** @ORM\OneToMany(targetEntity="Session", mappedBy="user", cascade={"all"}) */
 	protected $sessions;
+	
+	public function __construct()
+	{
+		$this->sessions = new ArrayCollection();
+	}
 
 	public function getAuthToken(): string
 	{
 		return $this->token;
+	}
+}
+```
+
+```php
+namespace App\Model\Security;
+
+use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
+use Nette\Security as NS;
+
+class Authenticator extends DoctrineAuthenticator
+{
+	public function authenticate(string $user, string $password): NS\IIdentity
+	{
+		// your authentication belongs here
+		
+		$session = new Session();
+		$session->setToken(Random::generate(32));
+		$session->setProfile($profile);
+		$this->em->flush();
 	}
 }
 ```
@@ -100,8 +125,6 @@ class User extends BaseEntity  implements IIdentity, UuidInterface, DoctrineAuth
 	}
 }
 ```
-
-## Example of Authenticator
 
 ```php
 namespace App\Model\Security;
