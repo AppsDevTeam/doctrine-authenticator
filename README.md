@@ -64,6 +64,9 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
  */
 class User implements DoctrineAuthenticatorIdentity
 {
+	/** @ORM\OneToMany(targetEntity="Session", mappedBy="user", cascade={"all"}) */
+	protected $sessions;
+
 	public function getAuthToken(): string
 	{
 		return $this->token;
