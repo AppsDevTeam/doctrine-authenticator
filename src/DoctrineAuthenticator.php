@@ -8,7 +8,6 @@ use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
 use Nette\Security\SimpleIdentity;
-use Nette\Security\User;
 use Nette\Security\UserStorage;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
@@ -48,7 +47,6 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		if ($entity) {
 			$this->userStorage->setExpiration($this->expiration, false);
-			$this->userStorage->saveAuthentication($identity);
 		}
 
 		return $entity?->getAuthEntity();
