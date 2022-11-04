@@ -56,7 +56,7 @@ class Identity implements DoctrineAuthenticatorIdentity
 	public function setAuthToken(string $token): self
 	{
 		$this->token = $token;
-		$this->sessions->add(new Session($this, $token);
+		$this->sessions->add(new Session($this, $token));
 		return $this;
 	}
 }
