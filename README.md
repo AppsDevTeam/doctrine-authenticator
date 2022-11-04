@@ -92,7 +92,7 @@ class Authenticator extends DoctrineAuthenticator
 			throw new NS\AuthenticationException('Identity not found');
 		}
 		
-		$identity->setAuthToken(Random::generate(32));
+		$identity->logIn(Random::generate(32));
 
 		return $profile;
 	}
