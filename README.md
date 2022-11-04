@@ -19,8 +19,6 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 	/** @ORM\ManyToOne(targetEntity="Profile", inversedBy="sessions") */
 	protected Profile $profile;
 
-	protected ?string $token = null;
-
 	public function getToken(): string
 	{
 		return $this->token;
@@ -62,6 +60,8 @@ class User implements DoctrineAuthenticatorIdentity
 {
 	/** @ORM\OneToMany(targetEntity="Session", mappedBy="profile", cascade={"all"}) */
 	protected $sessions;
+	
+	protected ?string $token = null;
 	
 	public function __construct()
 	{
