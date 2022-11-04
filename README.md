@@ -88,13 +88,13 @@ class Authenticator extends DoctrineAuthenticator
 {
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
-		if (! $identity = $this->em->getRepository(Profile::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
+		if (! $identity = $this->em->getRepository(Identity::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
 			throw new NS\AuthenticationException('Identity not found');
 		}
 		
 		$identity->logIn(Random::generate(32));
 
-		return $profile;
+		return $identity;
 	}
 	
 	protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession
@@ -147,11 +147,11 @@ class Authenticator extends DoctrineAuthenticator
 {
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
-		if (! $profile = $this->em->getRepository(Profile::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
+		if (! $identity = $this->em->getRepository(Identity::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
 			throw new NS\AuthenticationException('User not found');
 		}
 		
-		return $profile;
+		return $identity;
 	}
 }
 ```
@@ -220,6 +220,9 @@ Add valid until on log out and validate it on login:
 Entities\Session:
 
 ```php
+/** @ORM\Column(type="datetime_immutable", nullable=true) */
+protected ?DateTimeImmutable $validUntil = null;
+
 public function logOut(): void
 {
 	/** @var Session $_session */
@@ -245,7 +248,7 @@ public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $
 
 Authenticator:
 
-```
+```php
 protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession
 {
 	/** @var DoctrineAuthenticatorSession $entity */

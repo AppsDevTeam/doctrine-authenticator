@@ -2,7 +2,6 @@
 
 namespace ADT\DoctrineAuthenticator;
 
-use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
@@ -20,7 +19,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		protected readonly UserStorage $userStorage
 	) {}
 
-	abstract protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession;
+	abstract protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession;
 
 	/**
 	 * @param DoctrineAuthenticatorIdentity $identity
@@ -41,9 +40,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		if ($entity) {
 			$this->userStorage->setExpiration($this->expiration, false);
-		}
-		
-		if ($entity) {
+
 			$entity->getAuthEntity()->setAuthToken($identity->getId());
 			
 			return $entity->getAuthEntity();
