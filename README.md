@@ -99,7 +99,6 @@ class Authenticator extends DoctrineAuthenticator
 	
 	protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession
 	{
-		/** @var DoctrineAuthenticatorSession $entity */
 		return $this->em->getRepository(Session::class)->findOneBy(['token' => $identity->getId()]);
 	}
 }
