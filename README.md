@@ -249,7 +249,7 @@ public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $
 Authenticator:
 
 ```php
-protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession
+protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 {
 	/** @var DoctrineAuthenticatorSession $entity */
 	return $this->em->getRepository(Session::class)->findOneBy(['token' => $identity->getId(), 'validUntil' => NULL]);
