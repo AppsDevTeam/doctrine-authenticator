@@ -180,7 +180,7 @@ class SecurityUser extends User
 }
 ```
 
-Add creation timestamp:
+Add creation timestamp (using https://github.com/doctrine-extensions/DoctrineExtensions):
 
 ```php
 
@@ -194,7 +194,6 @@ use Gedmo\Mapping\Annotation as Gedmo;
 trait CreatedAt
 {
 	/**
-	 * @var DateTimeImmutable
 	 * @Gedmo\Timestampable(on="create")
 	 * @ORM\Column(type="datetime_immutable")
 	 */
