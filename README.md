@@ -41,7 +41,7 @@ class Identity implements DoctrineAuthenticatorIdentity
 	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"all"}) */
 	protected $sessions;
 	
-	protected ?string $token = null;
+	protected string $token;
 	
 	public function __construct()
 	{
