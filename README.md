@@ -19,6 +19,13 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 	/** @ORM\ManyToOne(targetEntity="Profile", inversedBy="sessions") */
 	protected Profile $profile;
 
+	public function __construct(Profile $profile, string $token)
+	{
+		$this->profile = $profile;
+		$this->token = $token;
+		$profile->addSession($session);
+	}
+
 	public function getToken(): string
 	{
 		return $this->token;
@@ -72,6 +79,13 @@ class User implements DoctrineAuthenticatorIdentity
 	{
 		return $this->token;
 	}
+	
+	public function addSession(Session $session): self
+	{
+		$this->sessions->add($session);
+		$this->token = $session->getToken();
+		return $this;
+	}
 }
 ```
 
@@ -88,13 +102,9 @@ class Authenticator extends DoctrineAuthenticator
 		if (! $profile = $this->em->getRepository(Profile::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
 			throw new NS\AuthenticationException('User not found');
 		}
-		
-		$session = new Session();
-		$session->setToken(Random::generate(32));
-		$session->setProfile($profile);
-		$this->em->persist($session);
-		$this->em->flush();
-		
+
+		$this->em->persist($new Session($profile, Random::generate(32)));
+
 		return $profile;
 	}
 }
