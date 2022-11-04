@@ -59,6 +59,20 @@ class Identity implements DoctrineAuthenticatorIdentity
 		$this->sessions->add(new Session($this, $token));
 		return $this;
 	}
+	
+	public function logIn(string $token): self
+	{
+		$this->setAuthToken($token);
+		$this->sessions->add(new Session($this, $token));
+		return $this;
+	}
+	
+	public function logOut(string $token): self
+	{
+		$this->sessions->f($token);
+		$this->sessions->add(new Session($this, $token));
+		return $this;
+	}
 }
 ```
 
@@ -203,13 +217,11 @@ Add valid until on log out and validate it on login:
  */
 class SecurityUser extends User
 {
-	public function __construct(string $module, EntityManager $em, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
+	public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
 	{
 		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
-		$this->onLoggedOut[] = function(SecurityUser $securityUser) use ($em) {
-			/** @var Session $session */
-			$session = $this->em->getRepository(Session::class)->findOneby(['token' => $securityUser->getIdentity()->getAuthToken()]);
-			$session->setValidUntil(new DateTimeImmutable());
+		$this->onLoggedOut[] = function(SecurityUser $securityUser) {
+			$securityUser->getIdentity()->logOut();
 		};
 	}
 `
