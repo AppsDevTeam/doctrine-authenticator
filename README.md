@@ -148,7 +148,7 @@ class Authenticator extends DoctrineAuthenticator
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
 		if (! $identity = $this->em->getRepository(Identity::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
-			throw new NS\AuthenticationException('User not found');
+			throw new NS\AuthenticationException('Identity not found');
 		}
 		
 		return $identity;
