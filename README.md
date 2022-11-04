@@ -7,7 +7,7 @@ Allows you to use a Doctrine entity as a Nette identity.
 ```neon
 services:
 	security.userStorage: ADT\DoctrineAuthenticator\CookieStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entity\SessionStorage', 'token')
+	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entities\Session', 'token')
 ```
 
 ```php
@@ -19,25 +19,15 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 	/** @ORM\ManyToOne(targetEntity="Identity", inversedBy="sessions") */
 	protected Identity $identity;
 
-	public function __construct(Profile $profile, string $token)
+	public function __construct(Identity $identity, string $token)
 	{
-		$this->profile = $profile;
+		$this->identity = $identity;
 		$this->token = $token;
-	}
-
-	public function getToken(): string
-	{
-		return $this->token;
-	}
-
-	public function getIdentity(): Identity
-	{
-		return $this->identity;
 	}
 
 	public function getAuthEntity(): IIdentity
 	{
-		return $this->profile;
+		return $this->identity;
 	}
 }
 ```
@@ -82,11 +72,11 @@ class Authenticator extends DoctrineAuthenticator
 {
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
-		if (! $profile = $this->em->getRepository(Profile::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
+		if (! $identity = $this->em->getRepository(Profile::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
 			throw new NS\AuthenticationException('User not found');
 		}
-
-		$this->em->persist(new Session($profile, Random::generate(32)));
+		
+		$identity->setAuthToken(Random::generate(32));
 
 		return $profile;
 	}
@@ -99,7 +89,7 @@ class Authenticator extends DoctrineAuthenticator
 ```neon
 services:
 	security.userStorage: Nette\Bridges\SecurityHttp\SessionStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entity\User', 'id')
+	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entities\User', 'id')
 ```
 
 ```php
@@ -154,7 +144,7 @@ namespace App\Model\Security;
 use Nette\Security\User;
 
 /**
- * @method \App\Model\Entity\User getIdentity()
+ * @method \App\Model\Entities\Identity getIdentity()
  */
 class SecurityUser extends User
 {
@@ -168,7 +158,7 @@ Add creation timestamp:
 
 declare(strict_types=1);
 
-namespace App\Model\Entity\Attribute;
+namespace App\Model\Entities\Attributes;
 
 use DateTimeImmutable;
 use Gedmo\Mapping\Annotation as Gedmo;
