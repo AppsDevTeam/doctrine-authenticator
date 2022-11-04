@@ -210,7 +210,9 @@ trait CreatedAt
 
 Add valid until on log out and validate it on login:
 
-```php Session.php
+Entities\Session:
+
+```php
 public function logOut(): void
 {
 	/** @var Session $_session */
@@ -222,7 +224,9 @@ public function logOut(): void
 }
 ```
 
-```php SecurityUser
+SecurityUser:
+
+```php 
 public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
 {
 	parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
