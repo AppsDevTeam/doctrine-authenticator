@@ -18,9 +18,6 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 {
 	use Identifier;
 
-	/** @ORM\Column(type="string") */
-	protected string $token;
-
 	/** @ORM\ManyToOne(targetEntity="Profile", inversedBy="sessions") */
 	protected Profile $profile;
 
