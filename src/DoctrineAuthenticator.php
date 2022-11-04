@@ -48,7 +48,13 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		if ($entity) {
 			$this->userStorage->setExpiration($this->expiration, false);
 		}
+		
+		if ($entity) {
+			$entity->getAuthEntity()->setAuthToken($identity->getId());
+			
+			return $entity->getAuthEntity();
+		}
 
-		return $entity?->getAuthEntity();
+		return null;
 	}
 }
