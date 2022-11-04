@@ -25,7 +25,7 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 		$this->token = $token;
 	}
 
-	public function getAuthEntity(): DoctrineAuthenticatorIdentity
+	public function getAuthEntity(): DoctrineAuthenticatorIdentityvi
 	{
 		return $this->identity;
 	}
