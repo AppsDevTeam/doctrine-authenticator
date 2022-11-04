@@ -180,7 +180,7 @@ class SecurityUser extends User
 }
 ```
 
-Add creation timestamp (using https://github.com/doctrine-extensions/DoctrineExtensions):
+Add creation timestamp (using [https://github.com/doctrine-extensions/DoctrineExtensions](https://github.com/doctrine-extensions/DoctrineExtensions/blob/main/doc/timestampable.md)):
 
 ```php
 
