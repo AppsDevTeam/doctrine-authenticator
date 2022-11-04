@@ -151,6 +151,7 @@ use Nette\Security\User;
 
 /**
  * @method \App\Model\Entities\Identity getIdentity()
+ * @method UserStorage getStorage()
  */
 class SecurityUser extends User
 {
@@ -198,13 +199,18 @@ Add valid until on log out and validate it on login:
 ```
 /**
  * @method \App\Model\Entity\User getIdentity()
+ * @method UserStorage getStorage()
  */
 class SecurityUser extends User
 {
 	public function __construct(string $module, EntityManager $em, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
 	{
 		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
-		$this->em = $em;
+		$this->onLoggedOut[] = function(SecurityUser $securityUser) use ($em) {
+			/** @var Session $session */
+			$session = $this->em->getRepository(Session::class)->findOneby(['token' => $securityUser->getIdentity()->getAuthToken()]);
+			$session->setValidUntil(new DateTimeImmutable());
+		};
 	}
 `
 ```
