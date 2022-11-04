@@ -7,7 +7,7 @@ Allows you to use a Doctrine entity as a Nette identity.
 ```neon
 services:
 	security.userStorage: ADT\DoctrineAuthenticator\CookieStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entity\SessionStorage', 'sessionId')
+	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entity\SessionStorage', 'token')
 ```
 
 ```php
@@ -96,6 +96,7 @@ class Authenticator extends DoctrineAuthenticator
 		$session = new Session();
 		$session->setToken(Random::generate(32));
 		$session->setProfile($profile);
+		$this->em->persist($session);
 		$this->em->flush();
 		
 		return $profile;
