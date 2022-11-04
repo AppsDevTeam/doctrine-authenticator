@@ -73,7 +73,7 @@ class Authenticator extends DoctrineAuthenticator
 	public function authenticate(string $user, string $password): NS\IIdentity
 	{
 		if (! $identity = $this->em->getRepository(Profile::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
-			throw new NS\AuthenticationException('User not found');
+			throw new NS\AuthenticationException('Identity not found');
 		}
 		
 		$identity->setAuthToken(Random::generate(32));
@@ -89,7 +89,7 @@ class Authenticator extends DoctrineAuthenticator
 ```neon
 services:
 	security.userStorage: Nette\Bridges\SecurityHttp\SessionStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entities\User', 'id')
+	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entities\Identity', 'id')
 ```
 
 ```php
@@ -106,6 +106,12 @@ class User extends BaseEntity  implements IIdentity, UuidInterface, DoctrineAuth
 	public function getAuthToken(): string
 	{
 		return (string) $this->id;
+	}
+	
+	public function setAuthToken(string $token): self
+	{
+		$this->token = $token;
+		return $this;
 	}
 }
 ```
@@ -186,3 +192,20 @@ trait CreatedAt
 	}
 }
 ```
+
+Add valid until on log out and validate it on login:
+
+```
+/**
+ * @method \App\Model\Entity\User getIdentity()
+ */
+class SecurityUser extends User
+{
+	public function __construct(string $module, EntityManager $em, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
+	{
+		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+		$this->em = $em;
+	}
+`
+```
+
