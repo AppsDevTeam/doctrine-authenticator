@@ -210,20 +210,25 @@ trait CreatedAt
 
 Add valid until on log out and validate it on login:
 
-```
-/**
- * @method \App\Model\Entity\User getIdentity()
- * @method UserStorage getStorage()
- */
-class SecurityUser extends User
+```php Session.php
+public function logOut(): void
 {
-	public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
-	{
-		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
-		$this->onLoggedOut[] = function(SecurityUser $securityUser) {
-			$securityUser->getIdentity()->logOut();
-		};
+	/** @var Session $_session */
+	foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
+		if ($_session->getToken() === $this->token) {
+			$_session->setValidUntil(new DateTimeImmutable());
+		}
 	}
-`
+}
+```
+
+```php SecurityUser
+public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
+{
+	parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+	$this->onLoggedOut[] = function(SecurityUser $securityUser) {
+		$securityUser->getIdentity()->logOut();
+	};
+}
 ```
 
