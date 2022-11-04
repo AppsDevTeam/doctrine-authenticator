@@ -103,7 +103,7 @@ class Authenticator extends DoctrineAuthenticator
 			throw new NS\AuthenticationException('User not found');
 		}
 
-		$this->em->persist($new Session($profile, Random::generate(32)));
+		$this->em->persist(new Session($profile, Random::generate(32)));
 
 		return $profile;
 	}
