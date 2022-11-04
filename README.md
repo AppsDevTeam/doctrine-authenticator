@@ -7,7 +7,7 @@ Allows you to use a Doctrine entity as a Nette identity.
 ```neon
 services:
 	security.userStorage: ADT\DoctrineAuthenticator\CookieStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entities\Session', 'token')
+	security.authenticator: App\Model\Security\Authenticator('14 days')
 ```
 
 ```php
@@ -96,6 +96,12 @@ class Authenticator extends DoctrineAuthenticator
 
 		return $profile;
 	}
+	
+	protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession
+	{
+		/** @var DoctrineAuthenticatorSession $entity */
+		return $this->em->getRepository(Session::class)->findOneBy(['token' => $identity->getId()]);
+	}
 }
 ```
 
@@ -105,7 +111,7 @@ class Authenticator extends DoctrineAuthenticator
 ```neon
 services:
 	security.userStorage: Nette\Bridges\SecurityHttp\SessionStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days', 'App\Model\Entities\Identity', 'id')
+	security.authenticator: App\Model\Security\Authenticator('14 days')
 ```
 
 ```php
@@ -235,6 +241,16 @@ public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $
 	$this->onLoggedOut[] = function(SecurityUser $securityUser) {
 		$securityUser->getIdentity()->logOut();
 	};
+}
+```
+
+Authenticator:
+
+```
+protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession
+{
+	/** @var DoctrineAuthenticatorSession $entity */
+	return $this->em->getRepository(Session::class)->findOneBy(['token' => $identity->getId(), 'validUntil' => NULL]);
 }
 ```
 
