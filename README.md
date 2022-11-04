@@ -61,7 +61,7 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
  */
 class User implements DoctrineAuthenticatorIdentity
 {
-	/** @ORM\OneToMany(targetEntity="Session", mappedBy="user", cascade={"all"}) */
+	/** @ORM\OneToMany(targetEntity="Session", mappedBy="profile", cascade={"all"}) */
 	protected $sessions;
 	
 	public function __construct()
