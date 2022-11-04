@@ -17,15 +17,10 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 */
 	public function __construct(
 		protected readonly string $expiration,
-		protected readonly string $className,
-		protected readonly string $fieldName,
-		protected readonly EntityManagerInterface $em,
 		protected readonly UserStorage $userStorage
-	) {
-		if (! is_a($className, DoctrineAuthenticatorSession::class, true)) {
-			throw new Exception("Class '$className' must implements 'DoctrineAuthenticatorSession' interface!");
-		}
-	}
+	) {}
+
+	abstract protected function getEntity(IIdentity $identity): DoctrineAuthenticatorSession;
 
 	/**
 	 * @param DoctrineAuthenticatorIdentity $identity
@@ -42,8 +37,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
-		/** @var DoctrineAuthenticatorSession $entity */
-		$entity = $this->em->getRepository($this->className)->findOneBy([$this->fieldName => $identity->getId()]);
+		$entity = $this->getEntity($identity);
 
 		if ($entity) {
 			$this->userStorage->setExpiration($this->expiration, false);
