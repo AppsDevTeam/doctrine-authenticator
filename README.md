@@ -16,14 +16,13 @@ services:
  */
 class Session extends BaseEntity implements DoctrineAuthenticatorSession
 {
-	/** @ORM\ManyToOne(targetEntity="Profile", inversedBy="sessions") */
-	protected Profile $profile;
+	/** @ORM\ManyToOne(targetEntity="Identity", inversedBy="sessions") */
+	protected Identity $identity;
 
 	public function __construct(Profile $profile, string $token)
 	{
 		$this->profile = $profile;
 		$this->token = $token;
-		$profile->addSession($session);
 	}
 
 	public function getToken(): string
@@ -31,26 +30,10 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 		return $this->token;
 	}
 
-
-	public function setToken(string $token): Session
+	public function getIdentity(): Identity
 	{
-		$this->token = $token;
-		return $this;
+		return $this->identity;
 	}
-
-
-	public function getProfile(): Profile
-	{
-		return $this->profile;
-	}
-
-
-	public function setProfile(Profile $profile): Session
-	{
-		$this->profile = $profile;
-		return $this;
-	}
-
 
 	public function getAuthEntity(): IIdentity
 	{
@@ -63,9 +46,9 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 /**
  * @ORM\Entity
  */
-class User implements DoctrineAuthenticatorIdentity
+class Identity implements DoctrineAuthenticatorIdentity
 {
-	/** @ORM\OneToMany(targetEntity="Session", mappedBy="profile", cascade={"all"}) */
+	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"all"}) */
 	protected $sessions;
 	
 	protected ?string $token = null;
@@ -80,10 +63,10 @@ class User implements DoctrineAuthenticatorIdentity
 		return $this->token;
 	}
 	
-	public function addSession(Session $session): self
+	public function setAuthToken(string $token): self
 	{
-		$this->sessions->add($session);
-		$this->token = $session->getToken();
+		$this->token = $token;
+		$this->sessions->add(new Session($this, $token);
 		return $this;
 	}
 }
