@@ -16,8 +16,6 @@ services:
  */
 class Session extends BaseEntity implements DoctrineAuthenticatorSession
 {
-	use Identifier;
-
 	/** @ORM\ManyToOne(targetEntity="Profile", inversedBy="sessions") */
 	protected Profile $profile;
 
@@ -143,6 +141,64 @@ class Authenticator extends DoctrineAuthenticator
 		}
 		
 		return $profile;
+	}
+}
+```
+
+## Best practice
+
+Create your own security user to get code completion:
+
+```neon
+security.user: App\Model\Security\SecurityUser
+```
+
+```php
+
+namespace App\Model\Security;
+
+use Nette\Security\User;
+
+/**
+ * @method \App\Model\Entity\User getIdentity()
+ */
+class SecurityUser extends User
+{
+
+}
+```
+
+Add creation timestamp:
+
+```php
+
+declare(strict_types=1);
+
+namespace App\Model\Entity\Attribute;
+
+use DateTimeImmutable;
+use Gedmo\Mapping\Annotation as Gedmo;
+
+trait CreatedAt
+{
+	/**
+	 * @var DateTimeImmutable
+	 * @Gedmo\Timestampable(on="create")
+	 * @ORM\Column(type="datetime_immutable")
+	 */
+	protected DateTimeImmutable $createdAt;
+
+
+	public function getCreatedAt(): DateTimeImmutable
+	{
+		return $this->createdAt;
+	}
+
+
+	public function setCreatedAt(DateTimeImmutable $createdAt): self
+	{
+		$this->createdAt = $createdAt;
+		return $this;
 	}
 }
 ```
