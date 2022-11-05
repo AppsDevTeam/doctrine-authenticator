@@ -255,3 +255,45 @@ protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 }
 ```
 
+Save additional information like IP and user agent:
+
+Entities\Identity:
+
+```
+public function getSession(): Session
+{
+	/** @var Session $_session */
+	foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
+		if ($_session->getToken() === $this->token) {
+			return $_session;
+		}
+	}
+
+	throw new Exception('Session not found!');
+}
+```
+
+Entities\Session:
+
+```
+/** @ORM\Column(type="string", nullable=false) */
+protected string $ip;
+
+/** @ORM\Column(type="string", nullable=false) */
+protected string $userAgent;
+
+public function setIp(string $ip): self
+{
+	$this->ip = $ip;
+	return $this;
+}
+
+
+public function setUserAgent(string $userAgent): self
+{
+	$this->userAgent = $userAgent;
+	return $this;
+}
+```
+
+
