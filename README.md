@@ -70,7 +70,7 @@ class Identity implements DoctrineAuthenticatorIdentity
 	 */
 	public function getSessions(): array
 	{
-		return $this->sessions->filter(fn(Session $session) => !$session->getValidUntil())->toArray();
+		return $this->sessions->toArray();
 	}
 }
 ```
@@ -139,6 +139,8 @@ class SecurityUser extends User
 
 
 ```php
+<?php
+
 namespace App\Model\Security;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
@@ -218,31 +220,10 @@ class Authenticator extends DoctrineAuthenticator
 
 ## Best practice
 
-### Create your own security user to get code completion:
-
-```neon
-security.user: App\Model\Security\SecurityUser
-```
-
-```php
-
-namespace App\Model\Security;
-
-use Nette\Security\User;
-
-/**
- * @method \App\Model\Entities\Identity getIdentity()
- * @method UserStorage getStorage()
- */
-class SecurityUser extends User
-{
-
-}
-```
-
 ### Add creation timestamp (using [https://github.com/doctrine-extensions/DoctrineExtensions](https://github.com/doctrine-extensions/DoctrineExtensions/blob/main/doc/timestampable.md)):
 
 ```php
+<?php
 
 declare(strict_types=1);
 
@@ -274,24 +255,14 @@ trait CreatedAt
 }
 ```
 
-### Add valid until on log out and validate it on login:
-
-Entities\Session:
+Entities\Session.php
 
 ```php
-/** @ORM\Column(type="datetime_immutable", nullable=true) */
-protected ?DateTimeImmutable $validUntil = null;
-
-public function logOut(): void
-{
-	/** @var Session $_session */
-	foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
-		if ($_session->getToken() === $this->token) {
-			$_session->setValidUntil(new DateTimeImmutable());
-		}
-	}
-}
+	use CreatedAt;
 ```
+
+### Add valid until on log out and validate it on login:
+
 
 SecurityUser:
 
@@ -299,8 +270,17 @@ SecurityUser:
 public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
 {
 	parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+
 	$this->onLoggedOut[] = function(SecurityUser $securityUser) {
-		$securityUser->getIdentity()->logOut();
+		$user = $securityUser->getIdentity();
+
+		foreach ($user->getIdentity()->getSessions() as $_session) {
+			if ($_session->getToken() === $user->getAuthToken()) {
+				$_session->setValidUntil(new DateTimeImmutable());
+				$this->em->flush($_session);
+				return;
+			}
+		}
 	};
 }
 ```
@@ -315,23 +295,19 @@ protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 }
 ```
 
-### Save additional information like IP and User-Agent header:
-
 Entities\Identity:
 
 ```
-public function getSession(): Session
+/**
+ * @return Session[]
+ */
+public function getSessions(): array
 {
-	/** @var Session $_session */
-	foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
-		if ($_session->getToken() === $this->token) {
-			return $_session;
-		}
-	}
-
-	throw new Exception('Session not found!');
+	return $this->sessions->filter(fn(Session $session) => !$session->getValidUntil())->toArray();
 }
 ```
+
+### Save additional information like IP and User-Agent header:
 
 Entities\Session:
 
