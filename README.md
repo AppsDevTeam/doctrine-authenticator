@@ -35,6 +35,44 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 	{
 		return $this->identity;
 	}
+	
+	public function getValidUntil(): ?DateTimeImmutable
+	{
+		return $this->validUntil;
+	}
+
+
+	public function setValidUntil(DateTimeImmutable $validUntil): self
+	{
+		$this->validUntil = $validUntil;
+		return $this;
+	}
+
+
+	public function getIp(): string
+	{
+		return $this->ip;
+	}
+
+
+	public function setIp(string $ip): self
+	{
+		$this->ip = $ip;
+		return $this;
+	}
+
+
+	public function getUserAgent(): string
+	{
+		return $this->userAgent;
+	}
+
+
+	public function setUserAgent(string $userAgent): self
+	{
+		$this->userAgent = $userAgent;
+		return $this;
+	}
 }
 ```
 
