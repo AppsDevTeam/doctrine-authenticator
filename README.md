@@ -90,10 +90,10 @@ use Nette\Security\IAuthenticator;
 use Nette\Security\IUserStorage;
 use Nette\Security\User;
 use Nette\Security\UserStorage;
+use App\Model\Entity\Identity;
 
 /**
- * @method \App\Model\Entity\User getIdentity()
- * @method UserStorage getStorage()
+ * @method Identity getIdentity()
  */
 class SecurityUser extends User
 {
@@ -119,7 +119,7 @@ class SecurityUser extends User
 	}
 	
 	/**
-	 * @param \App\Model\Entity\User $user
+	 * @param Identity $user
 	 * @param string|null $password
 	 * @return void
 	 * @throws AuthenticationException
