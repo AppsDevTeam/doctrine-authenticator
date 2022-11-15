@@ -29,11 +29,9 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 	{
 		$this->identity = $identity;
 		$this->token = $token;
-
-		$identity->addSession($this);
 	}
 
-	public function getAuthEntity(): DoctrineAuthenticatorIdentityvi
+	public function getAuthEntity(): DoctrineAuthenticatorIdentity
 	{
 		return $this->identity;
 	}
@@ -67,38 +65,12 @@ class Identity implements DoctrineAuthenticatorIdentity
 		return $this;
 	}
 	
-	public function logIn($token): Session
+	/**
+	 * @return Session[]
+	 */
+	public function getSessions(): array
 	{
-		if ($this->token) {
-			throw new Exception('User is already logged in!');
-		}
-
-		$this->setAuthToken($token);
-
-		return new Session($this, $token);
-	}
-	
-	public function logOut(): void
-	{
-		/** @var Session $_session */
-		foreach ($this->getSessions() as $_session) {
-			if ($_session->getToken() === $this->token) {
-				$_session->setValidUntil(new DateTimeImmutable());
-				return;
-			}
-		}
-
-		throw new \Exception('Session not found!');
-	}
-	
-	public function getSessions(): Collection
-	{
-		return $this->sessions->filter(fn(Session $session) => !$session->getValidUntil());
-	}
-
-	public function addSession(Session $session): bool
-	{
-		return $this->sessions->add($session);
+		return $this->sessions->filter(fn(Session $session) => !$session->getValidUntil())->toArray();
 	}
 }
 ```
@@ -117,7 +89,7 @@ class Authenticator extends DoctrineAuthenticator
 			throw new NS\AuthenticationException('Identity not found');
 		}
 		
-		$identity->logIn(Random::generate(32));
+		$identity->setAuthToken(Random::generate(32));
 
 		return $identity;
 	}
