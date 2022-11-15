@@ -2,6 +2,12 @@
 
 Allows you to use a Doctrine entity as a Nette identity.
 
+## Install
+
+```
+composer require adt/doctrine-authenticator
+```
+
 ## Example for CookieStorage
 
 ```neon
@@ -158,7 +164,7 @@ class Authenticator extends DoctrineAuthenticator
 
 ## Best practice
 
-Create your own security user to get code completion:
+### Create your own security user to get code completion:
 
 ```neon
 security.user: App\Model\Security\SecurityUser
@@ -180,7 +186,7 @@ class SecurityUser extends User
 }
 ```
 
-Add creation timestamp (using [https://github.com/doctrine-extensions/DoctrineExtensions](https://github.com/doctrine-extensions/DoctrineExtensions/blob/main/doc/timestampable.md)):
+### Add creation timestamp (using [https://github.com/doctrine-extensions/DoctrineExtensions](https://github.com/doctrine-extensions/DoctrineExtensions/blob/main/doc/timestampable.md)):
 
 ```php
 
@@ -214,7 +220,7 @@ trait CreatedAt
 }
 ```
 
-Add valid until on log out and validate it on login:
+### Add valid until on log out and validate it on login:
 
 Entities\Session:
 
@@ -255,7 +261,7 @@ protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 }
 ```
 
-Save additional information like IP and user agent:
+### Save additional information like IP and user agent:
 
 Entities\Identity:
 
