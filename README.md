@@ -2,6 +2,12 @@
 
 Allows you to use a Doctrine entity as a Nette identity.
 
+## Install
+
+```
+composer require adt/doctrine-authenticator
+```
+
 ## Example for CookieStorage
 
 ```neon
@@ -25,9 +31,47 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 		$this->token = $token;
 	}
 
-	public function getAuthEntity(): DoctrineAuthenticatorIdentityvi
+	public function getAuthEntity(): DoctrineAuthenticatorIdentity
 	{
 		return $this->identity;
+	}
+	
+	public function getValidUntil(): ?DateTimeImmutable
+	{
+		return $this->validUntil;
+	}
+
+
+	public function setValidUntil(DateTimeImmutable $validUntil): self
+	{
+		$this->validUntil = $validUntil;
+		return $this;
+	}
+
+
+	public function getIp(): string
+	{
+		return $this->ip;
+	}
+
+
+	public function setIp(string $ip): self
+	{
+		$this->ip = $ip;
+		return $this;
+	}
+
+
+	public function getUserAgent(): string
+	{
+		return $this->userAgent;
+	}
+
+
+	public function setUserAgent(string $userAgent): self
+	{
+		$this->userAgent = $userAgent;
+		return $this;
 	}
 }
 ```
@@ -38,8 +82,8 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
  */
 class Identity implements DoctrineAuthenticatorIdentity
 {
-	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"all"}) */
-	protected $sessions;
+	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"persist"}) */
+	protected Collection $sessions;
 	
 	protected string $token;
 	
@@ -59,26 +103,82 @@ class Identity implements DoctrineAuthenticatorIdentity
 		return $this;
 	}
 	
-	public function logIn(string $token): self
+	/**
+	 * @return Session[]
+	 */
+	public function getSessions(): array
 	{
-		$this->setAuthToken($token);
-		$this->sessions->add(new Session($this, $token));
-		return $this;
-	}
-	
-	public function logOut(): void
-	{
-		/** @var Session $_session */
-		foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
-			if ($_session->getToken() === $this->token) {
-				$_session->setValidUntil(new DateTimeImmutable());
-			}
-		}
+		return $this->sessions->toArray();
 	}
 }
 ```
 
 ```php
+<?php
+
+namespace App\Model\Security;
+
+use App\Model\Doctrine\EntityManager;
+use App\Model\Entity\Session;
+use DateTimeImmutable;
+use Exception;
+use Nette\Http\Request;
+use Nette\Security\Authorizator;
+use Nette\Security\IAuthenticator;
+use Nette\Security\IUserStorage;
+use Nette\Security\User;
+use Nette\Security\UserStorage;
+use App\Model\Entity\Identity;
+
+/**
+ * @method Identity getIdentity()
+ */
+class SecurityUser extends User
+{
+	protected string $module;
+	protected EntityManager $em;
+	protected Request $httpRequest;
+
+	public function __construct(string $module, EntityManager $em, Request $httpRequest, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
+	{
+		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+
+		$this->module = $module;
+		$this->em = $em;
+		$this->httpRequest = $httpRequest;
+
+		$this->onLoggedIn[] = function(SecurityUser $securityUser) {
+			$user = $securityUser->getIdentity();
+
+			$session = new Session($user->getIdentity(), $user->getAuthToken());
+			$this->em->persist($session);
+			$this->em->flush($session);
+		};
+	}
+	
+	/**
+	 * @param Identity $user
+	 * @param string|null $password
+	 * @return void
+	 * @throws AuthenticationException
+	 * @throws Exception
+	 */
+	public function login($user, string $password = null): void
+	{
+		// ignore requests without User-Agent header, those are probably fakes
+		if (empty($this->httpRequest->getHeader('User-Agent'))) {
+			return;
+		}
+
+		parent::login($user, $password);
+	}
+}
+```
+
+
+```php
+<?php
+
 namespace App\Model\Security;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
@@ -92,7 +192,7 @@ class Authenticator extends DoctrineAuthenticator
 			throw new NS\AuthenticationException('Identity not found');
 		}
 		
-		$identity->logIn(Random::generate(32));
+		$identity->setAuthToken(Random::generate(32));
 
 		return $identity;
 	}
@@ -158,31 +258,10 @@ class Authenticator extends DoctrineAuthenticator
 
 ## Best practice
 
-Create your own security user to get code completion:
-
-```neon
-security.user: App\Model\Security\SecurityUser
-```
+### Add creation timestamp (using [https://github.com/doctrine-extensions/DoctrineExtensions](https://github.com/doctrine-extensions/DoctrineExtensions/blob/main/doc/timestampable.md)):
 
 ```php
-
-namespace App\Model\Security;
-
-use Nette\Security\User;
-
-/**
- * @method \App\Model\Entities\Identity getIdentity()
- * @method UserStorage getStorage()
- */
-class SecurityUser extends User
-{
-
-}
-```
-
-Add creation timestamp (using [https://github.com/doctrine-extensions/DoctrineExtensions](https://github.com/doctrine-extensions/DoctrineExtensions/blob/main/doc/timestampable.md)):
-
-```php
+<?php
 
 declare(strict_types=1);
 
@@ -214,24 +293,14 @@ trait CreatedAt
 }
 ```
 
-Add valid until on log out and validate it on login:
-
-Entities\Session:
+Entities\Session.php
 
 ```php
-/** @ORM\Column(type="datetime_immutable", nullable=true) */
-protected ?DateTimeImmutable $validUntil = null;
-
-public function logOut(): void
-{
-	/** @var Session $_session */
-	foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
-		if ($_session->getToken() === $this->token) {
-			$_session->setValidUntil(new DateTimeImmutable());
-		}
-	}
-}
+	use CreatedAt;
 ```
+
+### Add valid until on log out and validate it on login:
+
 
 SecurityUser:
 
@@ -239,8 +308,17 @@ SecurityUser:
 public function __construct(IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
 {
 	parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+
 	$this->onLoggedOut[] = function(SecurityUser $securityUser) {
-		$securityUser->getIdentity()->logOut();
+		$user = $securityUser->getIdentity();
+
+		foreach ($user->getIdentity()->getSessions() as $_session) {
+			if ($_session->getToken() === $user->getAuthToken()) {
+				$_session->setValidUntil(new DateTimeImmutable());
+				$this->em->flush($_session);
+				return;
+			}
+		}
 	};
 }
 ```
@@ -255,23 +333,19 @@ protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 }
 ```
 
-Save additional information like IP and user agent:
-
 Entities\Identity:
 
 ```
-public function getSession(): Session
+/**
+ * @return Session[]
+ */
+public function getSessions(): array
 {
-	/** @var Session $_session */
-	foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
-		if ($_session->getToken() === $this->token) {
-			return $_session;
-		}
-	}
-
-	throw new Exception('Session not found!');
+	return $this->sessions->filter(fn(Session $session) => !$session->getValidUntil())->toArray();
 }
 ```
+
+### Save additional information like IP and User-Agent header:
 
 Entities\Session:
 
@@ -296,4 +370,23 @@ public function setUserAgent(string $userAgent): self
 }
 ```
 
+### Invalidate session when User-Agent header does not match
 
+```
+protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
+{
+	/** @var Session $session */
+	if (!$session = $this->em->getRepository(Session::class)->findOneBy(['token' => $identity->getId(), 'validUntil' => NULL])) {
+		return null;
+	}
+
+	// Token was probably stolen
+	if ($session->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
+		$session->setValidUntil(new DateTimeImmutable());
+		$this->em->flush($session);
+		return null;
+	}
+
+	return $session;
+}
+```
