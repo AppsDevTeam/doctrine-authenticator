@@ -345,7 +345,7 @@ protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 	// Token was probably stolen
 	if ($session->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
 		$session->setValidUntil(new DateTimeImmutable());
-		$this->em->flush();
+		$this->em->flush($session);
 		return null;
 	}
 
