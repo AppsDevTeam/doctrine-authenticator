@@ -76,6 +76,69 @@ class Identity implements DoctrineAuthenticatorIdentity
 ```
 
 ```php
+<?php
+
+namespace App\Model\Security;
+
+use App\Model\Doctrine\EntityManager;
+use App\Model\Entity\Session;
+use DateTimeImmutable;
+use Exception;
+use Nette\Http\Request;
+use Nette\Security\Authorizator;
+use Nette\Security\IAuthenticator;
+use Nette\Security\IUserStorage;
+use Nette\Security\User;
+use Nette\Security\UserStorage;
+
+/**
+ * @method \App\Model\Entity\User getIdentity()
+ * @method UserStorage getStorage()
+ */
+class SecurityUser extends User
+{
+	protected EntityManager $em;
+	protected Request $httpRequest;
+	protected string $module;
+
+	public function __construct(string $module, EntityManager $em, Request $httpRequest, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
+	{
+		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+
+		$this->module = $module;
+		$this->em = $em;
+		$this->httpRequest = $httpRequest;
+
+		$this->onLoggedIn[] = function(SecurityUser $securityUser) {
+			$user = $securityUser->getIdentity();
+
+			$session = new Session($user->getIdentity(), $user->getAuthToken());
+			$session
+				->setIp($this->httpRequest->getRemoteAddress())
+				->setUserAgent($this->httpRequest->getHeader('User-Agent'));
+			$this->em->persist($session);
+			$this->em->flush($session);
+		};
+
+		$this->onLoggedOut[] = function(SecurityUser $securityUser) {
+			$user = $securityUser->getIdentity();
+
+			foreach ($user->getIdentity()->getSessions() as $_session) {
+				if ($_session->getToken() === $user->getAuthToken()) {
+					$_session->setValidUntil(new DateTimeImmutable());
+					$this->em->flush($_session);
+					return;
+				}
+			}
+
+			throw new Exception('Session not found!');
+		};
+	}
+}
+```
+
+
+```php
 namespace App\Model\Security;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
@@ -293,7 +356,7 @@ public function setUserAgent(string $userAgent): self
 }
 ```
 
-*** Invalidate session when User-Agent header does not match
+### Invalidate session when User-Agent header does not match
 
 ```
 protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
