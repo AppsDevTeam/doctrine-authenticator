@@ -42,16 +42,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
-		$entity = $this->getEntity($identity);
-
-		if ($entity) {
-			$this->userStorage->setExpiration($this->expiration, false);
-
-			$entity->getAuthEntity()->setAuthToken($identity->getId());
-			
-			return $entity->getAuthEntity();
+		if (!$entity = $this->getEntity($identity)) {
+			return null;
 		}
 
-		return null;
+		$this->userStorage->setExpiration($this->expiration, false);
+
+		$entity->getAuthEntity()->setAuthToken($identity->getId());
+		
+		return $entity->getAuthEntity();
 	}
 }
