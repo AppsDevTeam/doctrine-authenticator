@@ -81,14 +81,22 @@ class Identity implements DoctrineAuthenticatorIdentity
 	public function logOut(): void
 	{
 		/** @var Session $_session */
-		foreach ($this->sessions->filter(fn(Session $session) => !$session->getValidUntil()) as $_session) {
+		foreach ($this->getSessions() as $_session) {
 			if ($_session->getToken() === $this->token) {
 				$_session->setValidUntil(new DateTimeImmutable());
+				return;
 			}
 		}
+
+		throw new \Exception('Session not found!');
 	}
 	
-	public function addSession(Session $session): Collection
+	public function getSessions(): Collection
+	{
+		return $this->sessions->filter(fn(Session $session) => !$session->getValidUntil());
+	}
+
+	public function addSession(Session $session): bool
 	{
 		return $this->sessions->add($session);
 	}
