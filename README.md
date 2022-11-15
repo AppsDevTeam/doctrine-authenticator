@@ -97,9 +97,9 @@ use Nette\Security\UserStorage;
  */
 class SecurityUser extends User
 {
+	protected string $module;
 	protected EntityManager $em;
 	protected Request $httpRequest;
-	protected string $module;
 
 	public function __construct(string $module, EntityManager $em, Request $httpRequest, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
 	{
@@ -113,26 +113,26 @@ class SecurityUser extends User
 			$user = $securityUser->getIdentity();
 
 			$session = new Session($user->getIdentity(), $user->getAuthToken());
-			$session
-				->setIp($this->httpRequest->getRemoteAddress())
-				->setUserAgent($this->httpRequest->getHeader('User-Agent'));
 			$this->em->persist($session);
 			$this->em->flush($session);
 		};
+	}
+	
+	/**
+	 * @param \App\Model\Entity\User $user
+	 * @param string|null $password
+	 * @return void
+	 * @throws AuthenticationException
+	 * @throws Exception
+	 */
+	public function login($user, string $password = null): void
+	{
+		// ignore requests without User-Agent header, those are probably fakes
+		if (empty($this->httpRequest->getHeader('User-Agent'))) {
+			return;
+		}
 
-		$this->onLoggedOut[] = function(SecurityUser $securityUser) {
-			$user = $securityUser->getIdentity();
-
-			foreach ($user->getIdentity()->getSessions() as $_session) {
-				if ($_session->getToken() === $user->getAuthToken()) {
-					$_session->setValidUntil(new DateTimeImmutable());
-					$this->em->flush($_session);
-					return;
-				}
-			}
-
-			throw new Exception('Session not found!');
-		};
+		parent::login($user, $password);
 	}
 }
 ```
