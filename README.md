@@ -29,6 +29,8 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 	{
 		$this->identity = $identity;
 		$this->token = $token;
+
+		$identity->addSession($this);
 	}
 
 	public function getAuthEntity(): DoctrineAuthenticatorIdentityvi
@@ -65,11 +67,15 @@ class Identity implements DoctrineAuthenticatorIdentity
 		return $this;
 	}
 	
-	public function logIn(string $token): self
+	public function logIn($token): Session
 	{
+		if ($this->token) {
+			throw new Exception('User is already logged in!');
+		}
+
 		$this->setAuthToken($token);
-		$this->sessions->add(new Session($this, $token));
-		return $this;
+
+		return new Session($this, $token);
 	}
 	
 	public function logOut(): void
@@ -80,6 +86,11 @@ class Identity implements DoctrineAuthenticatorIdentity
 				$_session->setValidUntil(new DateTimeImmutable());
 			}
 		}
+	}
+	
+	public function addSession(Session $session): Collection
+	{
+		return $this->sessions->add($session);
 	}
 }
 ```
