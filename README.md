@@ -46,8 +46,8 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
  */
 class Identity implements DoctrineAuthenticatorIdentity
 {
-	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"all"}) */
-	protected $sessions;
+	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"persist"}) */
+	protected Collection $sessions;
 	
 	protected string $token;
 	
