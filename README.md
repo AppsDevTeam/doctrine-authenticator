@@ -280,7 +280,7 @@ protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
 }
 ```
 
-### Save additional information like IP and user agent:
+### Save additional information like IP and User-Agent header:
 
 Entities\Identity:
 
@@ -321,4 +321,23 @@ public function setUserAgent(string $userAgent): self
 }
 ```
 
+*** Invalidate session when User-Agent header does not match
 
+```
+protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession
+{
+	/** @var Session $session */
+	if (!$session = $this->em->getRepository(Session::class)->findOneBy(['token' => $identity->getId(), 'validUntil' => NULL])) {
+		return null;
+	}
+
+	// Token was probably stolen
+	if ($session->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
+		$session->setValidUntil(new DateTimeImmutable());
+		$this->em->flush();
+		return null;
+	}
+
+	return $session;
+}
+```
