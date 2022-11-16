@@ -32,7 +32,7 @@ use Exception;
 use Doctrine\ORM\Mapping as ORM;
 
 /** @ORM\Entity */
-final class Session implements DoctrineAuthenticatorSession
+class Session implements DoctrineAuthenticatorSession
 {
 	use Attributes\Identifier;
 	use Attributes\CreatedAt;
@@ -144,7 +144,7 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 /** @ORM\Entity */
-final class Identity implements DoctrineAuthenticatorIdentity
+class Identity implements DoctrineAuthenticatorIdentity
 {
 	use Identifier;
 
