@@ -12,18 +12,48 @@ composer require adt/doctrine-authenticator
 
 ```neon
 services:
-	security.userStorage: ADT\DoctrineAuthenticator\CookieStorage
+	security.user: App\Model\Security\SecurityUser
+	security.userStorage: Nette\Bridges\SecurityHttp\CookieStorage
 	security.authenticator: App\Model\Security\Authenticator('14 days')
 ```
 
 ```php
-/**
- * @ORM\Entity
- */
-class Session extends BaseEntity implements DoctrineAuthenticatorSession
+<?php
+
+declare(strict_types=1);
+
+namespace App\Model\Entities;
+
+use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
+use ADT\DoctrineAuthenticator\DoctrineAuthenticatorSession;
+use App\Model\Entities\Attributes;
+use DateTimeImmutable;
+use Exception;
+use Doctrine\ORM\Mapping as ORM;
+
+/** @ORM\Entity */
+final class Session implements DoctrineAuthenticatorSession
 {
+	use Attributes\Identifier;
+	use Attributes\CreatedAt;
+
 	/** @ORM\ManyToOne(targetEntity="Identity", inversedBy="sessions") */
 	protected Identity $identity;
+
+	/** @ORM\Column(type="string") */
+	protected string $token;
+
+	/** @ORM\Column(type="datetime_immutable", nullable=true) */
+	protected ?DateTimeImmutable $validUntil = null;
+
+	/** @ORM\Column(type="datetime_immutable", nullable=true) */
+	protected ?DateTimeImmutable $regeneratedAt = null;
+
+	/** @ORM\Column(type="string", nullable=false) */
+	protected string $ip;
+
+	/** @ORM\Column(type="string", nullable=false) */
+	protected string $userAgent;
 
 	public function __construct(Identity $identity, string $token)
 	{
@@ -31,16 +61,34 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 		$this->token = $token;
 	}
 
-	public function getAuthEntity(): DoctrineAuthenticatorIdentity
+	public function getIdentity(): Identity
 	{
 		return $this->identity;
 	}
-	
+
+	public function getToken(): string
+	{
+		return $this->token;
+	}
+
+	public function setToken(string $token): self
+	{
+		$this->token = $token;
+		return $this;
+	}
+
+	/**
+	 * @throws Exception
+	 */
+	public function getAuthEntity(): DoctrineAuthenticatorIdentity
+	{
+		return $this->getIdentity();
+	}
+
 	public function getValidUntil(): ?DateTimeImmutable
 	{
 		return $this->validUntil;
 	}
-
 
 	public function setValidUntil(DateTimeImmutable $validUntil): self
 	{
@@ -48,12 +96,21 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 		return $this;
 	}
 
+	public function getRegeneratedAt(): ?DateTimeImmutable
+	{
+		return $this->regeneratedAt;
+	}
+
+	public function setRegeneratedAt(?DateTimeImmutable $regeneratedAt): self
+	{
+		$this->regeneratedAt = $regeneratedAt;
+		return $this;
+	}
 
 	public function getIp(): string
 	{
 		return $this->ip;
 	}
-
 
 	public function setIp(string $ip): self
 	{
@@ -61,12 +118,10 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 		return $this;
 	}
 
-
 	public function getUserAgent(): string
 	{
 		return $this->userAgent;
 	}
-
 
 	public function setUserAgent(string $userAgent): self
 	{
@@ -77,38 +132,81 @@ class Session extends BaseEntity implements DoctrineAuthenticatorSession
 ```
 
 ```php
-/**
- * @ORM\Entity
- */
-class Identity implements DoctrineAuthenticatorIdentity
+<?php
+
+namespace App\Model\Entities;
+
+use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
+use App\Model\Entities\Attributes\Identifier;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\ORM\Mapping as ORM;
+
+/** @ORM\Entity */
+final class Identity implements DoctrineAuthenticatorIdentity
 {
-	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity", cascade={"persist"}) */
+	use Identifier;
+
+	/** @ORM\Column(type="string", unique=true) */
+	protected string $email;
+
+	/** @ORM\Column(type="string") */
+	protected string $password;
+
+	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity") */
 	protected Collection $sessions;
-	
+
 	protected string $token;
-	
+
 	public function __construct()
 	{
 		$this->sessions = new ArrayCollection();
+	}
+
+	public function getRoles(): array
+	{
+		return [];
 	}
 
 	public function getAuthToken(): string
 	{
 		return $this->token;
 	}
-	
+
 	public function setAuthToken(string $token): self
 	{
 		$this->token = $token;
 		return $this;
 	}
-	
+
 	/**
 	 * @return Session[]
 	 */
 	public function getSessions(): array
 	{
 		return $this->sessions->toArray();
+	}
+
+	public function getEmail(): string
+	{
+		return $this->email;
+	}
+
+	public function setEmail(string $email): self
+	{
+		$this->email = $email;
+		return $this;
+	}
+
+	public function getPassword(): string
+	{
+		return $this->password;
+	}
+
+	public function setPassword(string $password): self
+	{
+		$this->password = $password;
+		return $this;
 	}
 }
 ```
