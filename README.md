@@ -40,7 +40,7 @@ final class Session implements DoctrineAuthenticatorSession
 	/** @ORM\ManyToOne(targetEntity="Identity", inversedBy="sessions") */
 	protected Identity $identity;
 
-	/** @ORM\Column(type="string") */
+	/** @ORM\Column(type="string", length="32") */
 	protected string $token;
 
 	/** @ORM\Column(type="datetime_immutable", nullable=true) */
@@ -129,6 +129,7 @@ final class Session implements DoctrineAuthenticatorSession
 		return $this;
 	}
 }
+
 ```
 
 ```php
@@ -374,7 +375,7 @@ class Authenticator extends DoctrineAuthenticator
 
 	private static function generateToken(): string
 	{
-		return Random::generate(255);
+		return Random::generate(32);
 	}
 }
 ```
