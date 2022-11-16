@@ -11,19 +11,15 @@ use Nette\Security\UserStorage;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
-	protected string $expiration;
 	protected UserStorage $userStorage;
 
-	abstract protected function getEntity(IIdentity $identity): ?DoctrineAuthenticatorSession;
+	abstract protected function getEntity(SimpleIdentity $identity): ?DoctrineAuthenticatorIdentity;
 
 	/**
 	 * @throws Exception
 	 */
-	public function __construct(
-		string $expiration,
-		UserStorage $userStorage
-	) {
-		$this->expiration = $expiration;
+	public function __construct(UserStorage $userStorage)
+	{
 		$this->userStorage = $userStorage;
 	}
 
@@ -42,14 +38,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
-		if (!$entity = $this->getEntity($identity)) {
+		if (!$doctrineAuthenticatorIdentity = $this->getEntity($identity)) {
 			return null;
 		}
 
-		$this->userStorage->setExpiration($this->expiration, false);
+		$this->userStorage->saveAuthentication($identity);
 
-		$entity->getAuthEntity()->setAuthToken($identity->getId());
+		$doctrineAuthenticatorIdentity->setAuthToken($identity->getId());
 		
-		return $entity->getAuthEntity();
+		return $doctrineAuthenticatorIdentity;
 	}
 }
