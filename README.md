@@ -8,7 +8,7 @@ Allows you to use a Doctrine entity as a Nette identity.
 composer require adt/doctrine-authenticator
 ```
 
-## Example for CookieStorage
+## Usage
 
 ```neon
 services:
@@ -375,59 +375,6 @@ class Authenticator extends DoctrineAuthenticator
 	private static function generateToken(): string
 	{
 		return Random::generate(255);
-	}
-}
-
-```
-
-
-## Example for SessionStorage
-
-```neon
-services:
-	security.userStorage: Nette\Bridges\SecurityHttp\SessionStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days')
-```
-
-```php
-/**
- * @ORM\Entity
- */
-class User extends BaseEntity  implements IIdentity, UuidInterface, DoctrineAuthenticatorSession, DoctrineAuthenticatorIdentity
-{
-	public function getAuthEntity(): IIdentity
-	{
-		return $this;
-	}
-
-	public function getAuthToken(): string
-	{
-		return (string) $this->id;
-	}
-	
-	public function setAuthToken(string $token): self
-	{
-		$this->token = $token;
-		return $this;
-	}
-}
-```
-
-```php
-namespace App\Model\Security;
-
-use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
-use Nette\Security as NS;
-
-class Authenticator extends DoctrineAuthenticator
-{
-	public function authenticate(string $user, string $password): NS\IIdentity
-	{
-		if (! $identity = $this->em->getRepository(Identity::class)->findBy(['email' => $user, 'password' => (new NS\Passwords)->hash($password)])) {
-			throw new NS\AuthenticationException('Identity not found');
-		}
-		
-		return $identity;
 	}
 }
 ```
