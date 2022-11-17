@@ -10,12 +10,16 @@ composer require adt/doctrine-authenticator
 
 ## Usage
 
+### 1) Neon configuration
+
 ```neon
 services:
 	security.user: App\Model\Security\SecurityUser
 	security.userStorage: Nette\Bridges\SecurityHttp\CookieStorage
 	security.authenticator: App\Model\Security\Authenticator('14 days')
 ```
+
+### 2) Create a Session entity implementing DoctrineAuthenticatorSession
 
 ```php
 <?php
@@ -132,6 +136,8 @@ class Session implements DoctrineAuthenticatorSession
 
 ```
 
+### 3) Create a Identity entity implementing DoctrineAuthenticatorIdentity
+
 ```php
 <?php
 
@@ -212,6 +218,8 @@ class Identity implements DoctrineAuthenticatorIdentity
 }
 ```
 
+4) Create a SecurityUser service extending Security\User
+
 ```php
 <?php
 
@@ -281,6 +289,7 @@ class SecurityUser extends User
 }
 ```
 
+### Create Authenticator extending DoctrineAuthenticator
 
 ```php
 <?php
