@@ -1,6 +1,10 @@
 # Doctrine Authenticator
 
-Allows you to use a Doctrine entity as a Nette identity.
+- Allows you to use a Doctrine entity as a Nette identity.
+- Use cookies instead of PHP sessions
+- Regenerate token on each request to reduce the risk of token theft by brute force
+- Save additional information like IP address and User-Agent header for better token theft detection
+- Invalidate token on different User-Agent headers
 
 ## Install
 
