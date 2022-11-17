@@ -136,7 +136,7 @@ class Session implements DoctrineAuthenticatorSession
 
 ```
 
-### 3) Create a Identity entity implementing DoctrineAuthenticatorIdentity
+### 3) Create a Identity entity implementing DoctrineAuthenticatorIdentity
 
 ```php
 <?php
@@ -218,7 +218,7 @@ class Identity implements DoctrineAuthenticatorIdentity
 }
 ```
 
-4) Create a SecurityUser service extending Security\User
+### 4) Create a SecurityUser service extending Security\User
 
 ```php
 <?php
@@ -289,7 +289,7 @@ class SecurityUser extends User
 }
 ```
 
-### Create Authenticator extending DoctrineAuthenticator
+### 5) Create Authenticator extending DoctrineAuthenticator
 
 ```php
 <?php
