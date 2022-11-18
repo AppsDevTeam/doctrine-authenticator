@@ -4,13 +4,6 @@ declare(strict_types=1);
 
 namespace ADT\DoctrineAuthenticator;
 
-use App\Model\Entities\Identity;
-use App\Model\Entities\Session;
-use DateTimeImmutable;
-use Doctrine\DBAL\Connection;
-use Doctrine\ORM\Configuration;
-use Doctrine\ORM\EntityManager;
-use Doctrine\ORM\EntityManagerInterface;
 use Nette\Http\Request;
 use Nette\Security\Authorizator;
 use Nette\Security\IAuthenticator;

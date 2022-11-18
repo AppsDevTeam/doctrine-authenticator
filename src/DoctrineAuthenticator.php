@@ -4,14 +4,18 @@ namespace ADT\DoctrineAuthenticator;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\Configuration;
+use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Exception\ORMException;
+use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\OptimisticLockException;
 use Exception;
 use Nette\Bridges\SecurityHttp\CookieStorage;
+use Nette\Http\Request;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
 use Nette\Security\SimpleIdentity;
-use Nette\Security\UserStorage;
 use Nette\Utils\Random;
 use DateTimeImmutable;
 
@@ -22,9 +26,10 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected CookieStorage $cookieStorage;
 	private EntityManagerInterface $em;
 	protected StorageEntity $storageEntity;
+	protected Request $httpRequest;
 
 	abstract function getIdentity($id): IIdentity;
-	
+
 	/**
 	 * @throws Exception
 	 */
@@ -34,15 +39,17 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		CookieStorage $cookieStorage,
 		Connection $connection,
 		Configuration $configuration,
+		Request $httpRequest
 	) {
 		if (!is_a($storageEntityClass, StorageEntity::class, true)) {
-			throw new \Exception('Parameter "storageEntityClass" must be "' . StorageEntity::class . '" class.');
+			throw new Exception('Parameter "storageEntityClass" must be "' . StorageEntity::class . '" class.');
 		}
 
 		$this->expiration = $expiration;
-		$this->storageEntityClass = $storageEntityClass;		
+		$this->storageEntityClass = $storageEntityClass;
 		$this->cookieStorage = $cookieStorage;
-		$this->em = \Doctrine\ORM\EntityManager::create($connection->getParams(), $configuration);
+		$this->em = EntityManager::create($connection->getParams(), $configuration);
+		$this->httpRequest = $httpRequest;
 
 		$this->cookieStorage->setExpiration($expiration, false);
 	}
@@ -58,7 +65,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		/** @var StorageEntity $storageEntity */
 		$storageEntity = new ($this->storageEntityClass)($identity->getAuthObjectId(), $token);
 		$storageEntity
-			->setValidUntil(new \DateTimeImmutable('+' . $this->expiration))
+			->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
 			->setIp($this->httpRequest->getRemoteAddress())
 			->setUserAgent($this->httpRequest->getHeader('User-Agent'));
 		$this->em->persist($storageEntity);
@@ -67,6 +74,12 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return new SimpleIdentity($token);
 	}
 
+	/**
+	 * @throws OptimisticLockException
+	 * @throws ORMException
+	 * @throws NonUniqueResultException
+	 * @throws Exception
+	 */
 	public function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
 		/** @var StorageEntity $storageEntity */
@@ -74,7 +87,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->createQueryBuilder('e')
 			->where('e.token = :token')
 			->andWhere('e.validUntil >= :validUntil')
-			->setParameters(['token' => $identity->getId(), 'validUntil' => new \DateTime()])
+			->setParameters(['token' => $identity->getId(), 'validUntil' => new DateTimeImmutable()])
 			->getQuery()
 			->getOneOrNullResult()
 		) {
@@ -99,14 +112,18 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->em->flush();
 
-		$this->cookieStorage->saveAuthentication($identity, false);
-		
+		$this->cookieStorage->saveAuthentication($identity);
+
 		$this->storageEntity = $storageEntity;
-		
+
 		return $this->getIdentity($storageEntity->getObjectId());
 	}
 
-	public function clearIdentity(SecurityUser $securityUser)
+	/**
+	 * @throws OptimisticLockException
+	 * @throws ORMException
+	 */
+	public function clearIdentity()
 	{
 		$this->storageEntity->setValidUntil(new DateTimeImmutable());
 		$this->em->flush();

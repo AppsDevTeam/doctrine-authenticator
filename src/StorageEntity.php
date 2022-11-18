@@ -4,14 +4,8 @@ declare(strict_types=1);
 
 namespace ADT\DoctrineAuthenticator;
 
-use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
-use ADT\DoctrineAuthenticator\DoctrineAuthenticatorSession;
-use App\Model\Entities\Attributes;
-use App\Model\Entity\Identity;
 use DateTimeImmutable;
-use Exception;
 use Doctrine\ORM\Mapping as ORM;
-use Nette\Security\IIdentity;
 
 abstract class StorageEntity
 {
