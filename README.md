@@ -301,30 +301,28 @@ class SecurityUser extends User
 namespace App\Model\Security;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
-use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
 use App\Model\Entities\Identity;
-use App\Model\Entities\Session;
-use DateTimeImmutable;
+use Doctrine\DBAL\Connection;
+use Doctrine\ORM\Configuration;
 use Doctrine\ORM\EntityManagerInterface;
+use Nette\Bridges\SecurityHttp\CookieStorage;
 use Nette\Http\Request;
 use Nette\Security\AuthenticationException;
 use Nette\Security\IIdentity;
 use Nette\Security\Passwords;
-use Nette\Security\SimpleIdentity;
-use Nette\Security\UserStorage;
-use Nette\Utils\Random;
 
 class Authenticator extends DoctrineAuthenticator
 {
 	public function __construct(
-		protected readonly string $expiration,
+		string $expiration,
+		string $storageEntityClass,
+		CookieStorage $cookieStorage,
+		Connection $connection,
+		Configuration $configuration,
 		protected readonly EntityManagerInterface $em,
-		protected readonly Request $httpRequest,
-		UserStorage $userStorage
+		protected readonly Request $httpRequest
 	) {
-		parent::__construct($userStorage);
-
-		$userStorage->setExpiration($expiration, false);
+		parent::__construct($expiration, $storageEntityClass, $cookieStorage, $connection, $configuration);
 	}
 
 	public function authenticate(string $user, string $password): IIdentity
@@ -338,57 +336,12 @@ class Authenticator extends DoctrineAuthenticator
 			throw new AuthenticationException('Incorrect password!');
 		}
 
-		$identity->setAuthToken(self::generateToken());
-
 		return $identity;
 	}
 
-	/**
-	 * @throws \Exception
-	 */
-	protected function getEntity(SimpleIdentity $identity): ?DoctrineAuthenticatorIdentity
+	public function getIdentity($id): IIdentity
 	{
-		/** @var Session $session */
-		if (!$session = $this->em->getRepository(Session::class)
-				->createQueryBuilder('e')
-				->where('e.token = :token')
-				->andWhere('e.validUntil >= :validUntil')
-				->setParameters(['token' => $identity->getId(), 'validUntil' => new \DateTime()])
-				->getQuery()
-				->getOneOrNullResult()
-		) {
-			return null;
-		}
-
-		// Token was probably stolen
-		if ($session->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
-			$session->setValidUntil(new DateTimeImmutable());
-			$this->em->flush($session);
-			return null;
-		}
-
-		// Extend the expiration
-		$session->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
-
-		// Create a new token to reduce the risk of theft
-		$token = self::generateToken();
-		$session->setRegeneratedAt(new DateTimeImmutable());
-		$session->setToken($token);
-		$identity->setId($token);
-
-		$this->em->flush($session);
-
-		return $session->getAuthEntity();
-	}
-
-	public function getExpiration(): string
-	{
-		return $this->expiration;
-	}
-
-	private static function generateToken(): string
-	{
-		return Random::generate(32);
+		return $this->em->getRepository(Identity::class)->find($id);
 	}
 }
 ```
