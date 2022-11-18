@@ -23,7 +23,7 @@ services:
 	security.authenticator: App\Model\Security\Authenticator('14 days')
 ```
 
-### 2) Create a Session entity implementing DoctrineAuthenticatorSession
+### 2) Create a Session entity extending ADT\DoctrineAuthenticator\StorageEntity
 
 ```php
 <?php
@@ -45,7 +45,7 @@ class Session extends StorageEntity
 }
 ```
 
-### 3) Create a Identity entity implementing DoctrineAuthenticatorIdentity
+### 3) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
 
 ```php
 <?php
@@ -53,13 +53,14 @@ class Session extends StorageEntity
 namespace App\Model\Entities;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
+use ADT\DoctrineForms\Entity;
 use App\Model\Entities\Attributes\Identifier;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
-/** @ORM\Entity */
-class Identity implements DoctrineAuthenticatorIdentity
+/** 
+ * @ORM\Entity 
+ */
+class Identity implements DoctrineAuthenticatorIdentity, Entity
 {
 	use Identifier;
 
@@ -69,38 +70,9 @@ class Identity implements DoctrineAuthenticatorIdentity
 	/** @ORM\Column(type="string") */
 	protected string $password;
 
-	/** @ORM\OneToMany(targetEntity="Session", mappedBy="identity") */
-	protected Collection $sessions;
-
-	protected string $token;
-
-	public function __construct()
-	{
-		$this->sessions = new ArrayCollection();
-	}
-
 	public function getRoles(): array
 	{
 		return [];
-	}
-
-	public function getAuthToken(): string
-	{
-		return $this->token;
-	}
-
-	public function setAuthToken(string $token): self
-	{
-		$this->token = $token;
-		return $this;
-	}
-
-	/**
-	 * @return Session[]
-	 */
-	public function getSessions(): array
-	{
-		return $this->sessions->toArray();
 	}
 
 	public function getEmail(): string
@@ -124,81 +96,33 @@ class Identity implements DoctrineAuthenticatorIdentity
 		$this->password = $password;
 		return $this;
 	}
+
+	public function getAuthObjectId(): string
+	{
+		return (string) $this->getId();
+	}
 }
 ```
 
-### 4) Create a SecurityUser service extending Security\User
+### 4) Create a SecurityUser service extending ADT\DoctrineAuthenticator\SecurityUser
 
 ```php
 <?php
 
 namespace App\Model\Security;
 
-use App\Model\Doctrine\EntityManager;
 use App\Model\Entities\Identity;
-use App\Model\Entities\Session;
-use DateTimeImmutable;
-use Nette\Http\Request;
-use Nette\Security\Authorizator;
-use Nette\Security\IAuthenticator;
-use Nette\Security\IUserStorage;
-use Nette\Security\User;
-use Nette\Security\UserStorage;
 
 /**
  * @method Identity getIdentity()
- * @property Authenticator $authenticator
  */
-class SecurityUser extends User
+class SecurityUser extends \ADT\DoctrineAuthenticator\SecurityUser
 {
-	protected EntityManager $em;
-	protected Request $httpRequest;
 
-	public function __construct(EntityManager $em, Request $httpRequest, IUserStorage $legacyStorage = null, IAuthenticator $authenticator = null, Authorizator $authorizator = null, UserStorage $storage = null)
-	{
-		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
-
-		$this->em = $em;
-		$this->httpRequest = $httpRequest;
-
-		$this->onLoggedIn[] = function(SecurityUser $securityUser) {
-			$identity = $securityUser->getIdentity();
-
-			$session = new Session($identity, $identity->getAuthToken());
-			$session
-				->setValidUntil(new \DateTimeImmutable('+' . $this->authenticator->getExpiration()))
-				->setIp($this->httpRequest->getRemoteAddress())
-				->setUserAgent($this->httpRequest->getHeader('User-Agent'));
-			$this->em->persist($session);
-			$this->em->flush($session);
-		};
-
-		$this->onLoggedOut[] = function(SecurityUser $securityUser) {
-			$identity = $securityUser->getIdentity();
-
-			foreach ($identity->getSessions() as $_session) {
-				if ($_session->getToken() === $identity->getAuthToken()) {
-					$_session->setValidUntil(new DateTimeImmutable());
-					$this->em->flush($_session);
-					return;
-				}
-			}
-		};
-	}
-
-	public function login($user, string $password = null): void
-	{
-		// ignore requests without User-Agent header, those are probably fakes
-		if (empty($this->httpRequest->getHeader('User-Agent'))) {
-			return;
-		}
-
-		parent::login($user, $password);
-	}
 }
 ```
 
-### 5) Create Authenticator extending DoctrineAuthenticator
+### 5) Create Authenticator extending ADT\DoctrineAuthenticator\DoctrineAuthenticator
 
 ```php
 <?php
