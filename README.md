@@ -32,112 +32,17 @@ declare(strict_types=1);
 
 namespace App\Model\Entities;
 
-use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
-use ADT\DoctrineAuthenticator\DoctrineAuthenticatorSession;
+use ADT\DoctrineAuthenticator\StorageEntity;
 use App\Model\Entities\Attributes;
-use DateTimeImmutable;
-use Exception;
 use Doctrine\ORM\Mapping as ORM;
 
-/** @ORM\Entity */
-class Session implements DoctrineAuthenticatorSession
+/** 
+ * @ORM\Entity 
+ */
+class Session extends StorageEntity
 {
 	use Attributes\Identifier;
-	use Attributes\CreatedAt;
-
-	/** @ORM\ManyToOne(targetEntity="Identity", inversedBy="sessions") */
-	protected Identity $identity;
-
-	/** @ORM\Column(type="string", length="32") */
-	protected string $token;
-
-	/** @ORM\Column(type="datetime_immutable", nullable=true) */
-	protected ?DateTimeImmutable $validUntil = null;
-
-	/** @ORM\Column(type="datetime_immutable", nullable=true) */
-	protected ?DateTimeImmutable $regeneratedAt = null;
-
-	/** @ORM\Column(type="string", nullable=false) */
-	protected string $ip;
-
-	/** @ORM\Column(type="string", nullable=false) */
-	protected string $userAgent;
-
-	public function __construct(Identity $identity, string $token)
-	{
-		$this->identity = $identity;
-		$this->token = $token;
-	}
-
-	public function getIdentity(): Identity
-	{
-		return $this->identity;
-	}
-
-	public function getToken(): string
-	{
-		return $this->token;
-	}
-
-	public function setToken(string $token): self
-	{
-		$this->token = $token;
-		return $this;
-	}
-
-	/**
-	 * @throws Exception
-	 */
-	public function getAuthEntity(): DoctrineAuthenticatorIdentity
-	{
-		return $this->getIdentity();
-	}
-
-	public function getValidUntil(): ?DateTimeImmutable
-	{
-		return $this->validUntil;
-	}
-
-	public function setValidUntil(DateTimeImmutable $validUntil): self
-	{
-		$this->validUntil = $validUntil;
-		return $this;
-	}
-
-	public function getRegeneratedAt(): ?DateTimeImmutable
-	{
-		return $this->regeneratedAt;
-	}
-
-	public function setRegeneratedAt(?DateTimeImmutable $regeneratedAt): self
-	{
-		$this->regeneratedAt = $regeneratedAt;
-		return $this;
-	}
-
-	public function getIp(): string
-	{
-		return $this->ip;
-	}
-
-	public function setIp(string $ip): self
-	{
-		$this->ip = $ip;
-		return $this;
-	}
-
-	public function getUserAgent(): string
-	{
-		return $this->userAgent;
-	}
-
-	public function setUserAgent(string $userAgent): self
-	{
-		$this->userAgent = $userAgent;
-		return $this;
-	}
 }
-
 ```
 
 ### 3) Create a Identity entity implementing DoctrineAuthenticatorIdentity
