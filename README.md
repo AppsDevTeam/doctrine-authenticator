@@ -151,10 +151,10 @@ class Authenticator extends DoctrineAuthenticator
 		CookieStorage $cookieStorage,
 		Connection $connection,
 		Configuration $configuration,
+		Request $httpRequest,
 		protected readonly EntityManagerInterface $em,
-		protected readonly Request $httpRequest
 	) {
-		parent::__construct($expiration, $storageEntityClass, $cookieStorage, $connection, $configuration);
+		parent::__construct($expiration, $storageEntityClass, $cookieStorage, $connection, $configuration, $httpRequest);
 	}
 
 	public function authenticate(string $user, string $password): IIdentity
