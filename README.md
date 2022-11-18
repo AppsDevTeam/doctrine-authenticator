@@ -20,7 +20,10 @@ composer require adt/doctrine-authenticator
 services:
 	security.user: App\Model\Security\SecurityUser
 	security.userStorage: Nette\Bridges\SecurityHttp\CookieStorage
-	security.authenticator: App\Model\Security\Authenticator('14 days')
+	security.authenticator:
+		factory: App\Model\Security\Authenticator('14 days')
+		setup:
+			- setUserAgentCheck(true) # you can disable it for automatic tests for example
 ```
 
 ### 2) Create a Session entity extending ADT\DoctrineAuthenticator\StorageEntity
