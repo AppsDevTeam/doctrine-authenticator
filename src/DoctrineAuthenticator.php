@@ -23,12 +23,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
 	private string $expiration;
 	private string $storageEntityClass;
-	protected CookieStorage $cookieStorage;
+	private CookieStorage $cookieStorage;
 	private EntityManagerInterface $em;
-	protected StorageEntity $storageEntity;
-	protected Request $httpRequest;
+	private StorageEntity $storageEntity;
+	private Request $httpRequest;
+	
+	private bool $userAgentCheck = true;
 
-	abstract function getIdentity($id): IIdentity;
+	abstract function getIdentity($id): ?IIdentity;
 
 	/**
 	 * @throws Exception
@@ -54,6 +56,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$this->cookieStorage->setExpiration($expiration, false);
 	}
 
+	public function setUserAgentCheck(bool $userAgentCheck)
+	{
+		$this->userAgentCheck = $userAgentCheck;
+	}
+
 	/**
 	 * @param DoctrineAuthenticatorIdentity $identity
 	 * @throws Exception
@@ -70,6 +77,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->setUserAgent($this->httpRequest->getHeader('User-Agent'));
 		$this->em->persist($storageEntity);
 		$this->em->flush();
+
+		$this->storageEntity = $storageEntity;
 
 		return new SimpleIdentity($token);
 	}
@@ -95,8 +104,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 
 		// Token was probably stolen
-		if ($storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
+		if ($this->userAgentCheck && $storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
 			$storageEntity->setValidUntil(new DateTimeImmutable());
+			$storageEntity->setIsFraudDetected(true);
 			$this->em->flush();
 			return null;
 		}
@@ -127,6 +137,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	{
 		$this->storageEntity->setValidUntil(new DateTimeImmutable());
 		$this->em->flush();
+	}
+	
+	public function getStorageEntity(): StorageEntity
+	{
+		return $this->storageEntity;
 	}
 
 	private static function generateToken(): string

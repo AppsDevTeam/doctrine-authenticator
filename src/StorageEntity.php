@@ -24,11 +24,14 @@ abstract class StorageEntity
 	/** @ORM\Column(type="datetime_immutable", nullable=true) */
 	protected ?DateTimeImmutable $regeneratedAt = null;
 
-	/** @ORM\Column(type="string", nullable=false) */
-	protected string $ip;
+	/** @ORM\Column(type="string", length=15, nullable=true) */
+	protected ?string $ip = null;
 
-	/** @ORM\Column(type="string", nullable=false) */
-	protected string $userAgent;
+	/** @ORM\Column(type="string", nullable=true) */
+	protected ?string $userAgent = null;
+
+	/** @ORM\Column(type="boolean", nullable=false, options={"default":"false"}) */
+	protected bool $isFraudDetected = false;
 
 	public function __construct($objectId, string $token)
 	{
@@ -76,25 +79,36 @@ abstract class StorageEntity
 		return $this;
 	}
 
-	public function getIp(): string
+	public function getIp(): ?string
 	{
 		return $this->ip;
 	}
 
-	public function setIp(string $ip): self
+	public function setIp(?string $ip): self
 	{
 		$this->ip = $ip;
 		return $this;
 	}
 
-	public function getUserAgent(): string
+	public function getUserAgent(): ?string
 	{
 		return $this->userAgent;
 	}
 
-	public function setUserAgent(string $userAgent): self
+	public function setUserAgent(?string $userAgent): self
 	{
 		$this->userAgent = $userAgent;
+		return $this;
+	}
+
+	public function getIsFraudDetected(): bool
+	{
+		return $this->isFraudDetected;
+	}
+
+	public function setIsFraudDetected(bool $isFraudDetected): self
+	{
+		$this->isFraudDetected = $isFraudDetected;
 		return $this;
 	}
 }

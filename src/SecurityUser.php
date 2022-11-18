@@ -12,7 +12,7 @@ use Nette\Security\User;
 use Nette\Security\UserStorage;
 
 /**
- * @property DoctrineAuthenticator $authenticator
+ * @method DoctrineAuthenticator getAuthenticator()
  */
 class SecurityUser extends User
 {
@@ -30,15 +30,5 @@ class SecurityUser extends User
 		$this->httpRequest = $httpRequest;
 
 		$this->onLoggedOut[] = [$authenticator, 'clearIdentity'];
-	}
-
-	public function login($user, string $password = null): void
-	{
-		// ignore requests without User-Agent header, those are probably fakes
-		if (empty($this->httpRequest->getHeader('User-Agent'))) {
-			return;
-		}
-
-		parent::login($user, $password);
 	}
 }
