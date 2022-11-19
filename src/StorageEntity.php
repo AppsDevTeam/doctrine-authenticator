@@ -7,7 +7,7 @@ namespace ADT\DoctrineAuthenticator;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
-class StorageEntity
+abstract class StorageEntity
 {
 	/** @ORM\Column(type="datetime_immutable") */
 	protected DateTimeImmutable $createdAt;
