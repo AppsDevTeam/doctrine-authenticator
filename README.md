@@ -21,7 +21,7 @@ services:
 	security.user: App\Model\Security\SecurityUser
 	security.userStorage: Nette\Bridges\SecurityHttp\CookieStorage
 	security.authenticator:
-		factory: App\Model\Security\Authenticator('14 days')
+		factory: App\Model\Security\Authenticator('14 days', App\Model\Entities\Session)
 		setup:
 			- setUserAgentCheck(true) # you can disable it for automatic tests for example
 ```
