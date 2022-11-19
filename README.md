@@ -56,14 +56,13 @@ class Session extends StorageEntity
 namespace App\Model\Entities;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
-use ADT\DoctrineForms\Entity;
 use App\Model\Entities\Attributes\Identifier;
 use Doctrine\ORM\Mapping as ORM;
 
 /** 
  * @ORM\Entity 
  */
-class Identity implements DoctrineAuthenticatorIdentity, Entity
+class Identity implements DoctrineAuthenticatorIdentity
 {
 	use Identifier;
 
