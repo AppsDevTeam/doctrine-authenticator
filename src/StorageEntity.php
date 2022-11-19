@@ -7,7 +7,7 @@ namespace ADT\DoctrineAuthenticator;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
-abstract class StorageEntity
+class StorageEntity
 {
 	/** @ORM\Column(type="datetime_immutable") */
 	protected DateTimeImmutable $createdAt;
@@ -30,7 +30,7 @@ abstract class StorageEntity
 	/** @ORM\Column(type="string", nullable=true) */
 	protected ?string $userAgent = null;
 
-	/** @ORM\Column(type="boolean", nullable=false, options={"default":"false"}) */
+	/** @ORM\Column(type="boolean", nullable=false, options={"default":false}) */
 	protected bool $isFraudDetected = false;
 
 	public function __construct($objectId, string $token)
