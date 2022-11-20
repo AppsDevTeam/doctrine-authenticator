@@ -26,7 +26,7 @@ services:
 			- setUserAgentCheck(true) # you can disable it for automatic tests for example
 ```
 
-For those using attributes:
+Add new mapping via attributes:
 
 ```neon
 nettrine.orm.attributes:
@@ -63,11 +63,11 @@ class Identity implements DoctrineAuthenticatorIdentity, \ADT\DoctrineForms\Enti
 	use Identifier;
 
 	/** @Column(unique=true) */
-	#[Column]
+	#[Column(unique: true)]
 	protected string $email;
 
 	/** @Column */
-	#[Column(unique: true)]
+	#[Column]
 	protected string $password;
 
 	public function getRoles(): array
