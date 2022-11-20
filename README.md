@@ -170,3 +170,9 @@ class Authenticator extends DoctrineAuthenticator
 	}
 }
 ```
+
+### 5) Generate migrations
+
+```bash
+php bin/console migrations:diff
+```
