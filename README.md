@@ -120,7 +120,7 @@ class SecurityUser extends \ADT\DoctrineAuthenticator\SecurityUser
 
 ### 4) Create Authenticator extending ADT\DoctrineAuthenticator\DoctrineAuthenticator
 
-and implements methods `authenticate` and `getIdentity` by yourself. 
+and adjust methods `authenticate` and `getIdentity` to your needs. 
 
 ```php
 <?php
