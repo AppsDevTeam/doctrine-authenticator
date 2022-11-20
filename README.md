@@ -21,34 +21,30 @@ services:
 	security.user: App\Model\Security\SecurityUser
 	security.userStorage: Nette\Bridges\SecurityHttp\CookieStorage
 	security.authenticator:
-		factory: App\Model\Security\Authenticator('14 days')
+		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
 			- setUserAgentCheck(true) # you can disable it for automatic tests for example
 ```
 
-### 2) Create a Session entity extending ADT\DoctrineAuthenticator\StorageEntity
+Add new mapping via attributes:
 
-```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Model\Entities;
-
-use ADT\DoctrineAuthenticator\StorageEntity;
-use App\Model\Entities\Attributes;
-use Doctrine\ORM\Mapping as ORM;
-
-/** 
- * @ORM\Entity 
- */
-class Session extends StorageEntity
-{
-	use Attributes\Identifier;
-}
+```neon
+nettrine.orm.attributes:
+	mapping:
+		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src
 ```
 
-### 3) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
+or if you are still using annotations:
+
+```neon
+nettrine.orm.annotations:
+	mapping:
+		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src
+```
+
+### 2) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
+
+and adjust to your needs.
 
 ```php
 <?php
@@ -56,21 +52,22 @@ class Session extends StorageEntity
 namespace App\Model\Entities;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
-use ADT\DoctrineForms\Entity;
 use App\Model\Entities\Attributes\Identifier;
-use Doctrine\ORM\Mapping as ORM;
+use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Entity;
 
-/** 
- * @ORM\Entity 
- */
-class Identity implements DoctrineAuthenticatorIdentity, Entity
+/** @Entity */
+#[Entity]
+class Identity implements DoctrineAuthenticatorIdentity
 {
 	use Identifier;
 
-	/** @ORM\Column(type="string", unique=true) */
+	/** @Column(unique=true) */
+	#[Column(unique: true)]
 	protected string $email;
 
-	/** @ORM\Column(type="string") */
+	/** @Column */
+	#[Column]
 	protected string $password;
 
 	public function getRoles(): array
@@ -107,7 +104,7 @@ class Identity implements DoctrineAuthenticatorIdentity, Entity
 }
 ```
 
-### 4) Create a SecurityUser service extending ADT\DoctrineAuthenticator\SecurityUser
+### 3) Create a SecurityUser service extending ADT\DoctrineAuthenticator\SecurityUser
 
 ```php
 <?php
@@ -125,7 +122,9 @@ class SecurityUser extends \ADT\DoctrineAuthenticator\SecurityUser
 }
 ```
 
-### 5) Create Authenticator extending ADT\DoctrineAuthenticator\DoctrineAuthenticator
+### 4) Create Authenticator extending ADT\DoctrineAuthenticator\DoctrineAuthenticator
+
+and adjust methods `authenticate` and `getIdentity` to your needs. 
 
 ```php
 <?php
@@ -176,4 +175,10 @@ class Authenticator extends DoctrineAuthenticator
 		return $this->em->getRepository(Identity::class)->find($id);
 	}
 }
+```
+
+### 5) Generate migrations
+
+```bash
+php bin/console migrations:diff
 ```
