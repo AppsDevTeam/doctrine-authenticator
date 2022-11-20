@@ -59,7 +59,7 @@ use Doctrine\ORM\Mapping\Id;
 
 /** @Entity */
 #[Entity]
-class Identity extends BaseEntity implements DoctrineAuthenticatorIdentity
+class Identity implements DoctrineAuthenticatorIdentity
 {
 	/**
 	 * @Id
