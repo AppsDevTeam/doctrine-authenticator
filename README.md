@@ -58,7 +58,7 @@ use Doctrine\ORM\Mapping\Entity;
 
 /** @Entity */
 #[Entity]
-class Identity implements DoctrineAuthenticatorIdentity, \ADT\DoctrineForms\Entity
+class Identity implements DoctrineAuthenticatorIdentity
 {
 	use Identifier;
 
