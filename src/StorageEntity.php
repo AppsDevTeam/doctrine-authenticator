@@ -5,32 +5,62 @@ declare(strict_types=1);
 namespace ADT\DoctrineAuthenticator;
 
 use DateTimeImmutable;
-use Doctrine\ORM\Mapping as ORM;
+use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Entity;
+use Doctrine\ORM\Mapping\GeneratedValue;
+use Doctrine\ORM\Mapping\Id;
+use Doctrine\ORM\Mapping\Index;
+use Doctrine\ORM\Mapping\Table;
 
-abstract class StorageEntity
+/**
+ * @Entity
+ * @Table(name="session", indexes={@Index(name="token_validUntil_idx", fields={"token", "validUntil"})})
+ */
+#[Entity]
+#[Table(name: "session")]
+#[Index(name: "token_validUntil_idx", fields: ["token", "validUntil"])]
+class StorageEntity
 {
-	/** @ORM\Column(type="datetime_immutable") */
+	/**
+	 * @Id
+	 * @Column(type="integer")
+	 * @GeneratedValue
+	 */
+	#[Id]
+	#[Column]
+	#[GeneratedValue]
+	protected ?int $id;
+
+	/** @Column */
+	#[Column]
 	protected DateTimeImmutable $createdAt;
 
-	/** @ORM\Column(type="string", length=32) */
+	/** @Column(length=32) */
+	#[Column(length: 32)]
 	protected string $objectId;
 
-	/** @ORM\Column(type="string", length=32) */
+	/** @Column(length=32) */
+	#[Column(length: 32)]
 	protected string $token;
 
-	/** @ORM\Column(type="datetime_immutable", nullable=true) */
-	protected ?DateTimeImmutable $validUntil = null;
+	/** @Column */
+	#[Column]
+	protected DateTimeImmutable $validUntil;
 
-	/** @ORM\Column(type="datetime_immutable", nullable=true) */
+	/** @Column(nullable=true) */
+	#[Column(nullable: true)]
 	protected ?DateTimeImmutable $regeneratedAt = null;
 
-	/** @ORM\Column(type="string", length=15, nullable=true) */
+	/** @Column(length=15, nullable=true) */
+	#[Column(length: 15, nullable: true)]
 	protected ?string $ip = null;
 
-	/** @ORM\Column(type="string", nullable=true) */
+	/** @Column(nullable=true) */
+	#[Column(nullable: true)]
 	protected ?string $userAgent = null;
 
-	/** @ORM\Column(type="boolean", nullable=false, options={"default":"false"}) */
+	/** @Column(nullable=false, options={"default":false}) */
+	#[Column(nullable: false, options: ["default" => false])]
 	protected bool $isFraudDetected = false;
 
 	public function __construct($objectId, string $token)
@@ -38,7 +68,6 @@ abstract class StorageEntity
 		$this->createdAt = new DateTimeImmutable();
 		$this->objectId = $objectId;
 		$this->token = $token;
-
 	}
 
 	public function getObjectId(): string

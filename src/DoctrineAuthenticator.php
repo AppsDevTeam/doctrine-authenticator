@@ -22,11 +22,12 @@ use DateTimeImmutable;
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
 	private string $expiration;
-	private string $storageEntityClass;
 	private CookieStorage $cookieStorage;
-	private EntityManagerInterface $em;
-	private StorageEntity $storageEntity;
 	private Request $httpRequest;
+
+	private EntityManagerInterface $em;
+
+	private StorageEntity $storageEntity;
 	
 	private bool $userAgentCheck = true;
 
@@ -36,23 +37,18 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 * @throws Exception
 	 */
 	public function __construct(
-		string $expiration,
-		string $storageEntityClass,
+		?string $expiration,
 		CookieStorage $cookieStorage,
 		Connection $connection,
 		Configuration $configuration,
 		Request $httpRequest
 	) {
-		if (!is_a($storageEntityClass, StorageEntity::class, true)) {
-			throw new Exception('Parameter "storageEntityClass" must be "' . StorageEntity::class . '" class.');
-		}
-
 		$this->expiration = $expiration;
-		$this->storageEntityClass = $storageEntityClass;
-		$this->cookieStorage = $cookieStorage;
-		$this->em = EntityManager::create($connection->getParams(), $configuration);
 		$this->httpRequest = $httpRequest;
 
+		$this->em = EntityManager::create($connection->getParams(), $configuration);
+
+		$this->cookieStorage = $cookieStorage;
 		$this->cookieStorage->setExpiration($expiration, false);
 	}
 
@@ -70,7 +66,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$token = self::generateToken();
 
 		/** @var StorageEntity $storageEntity */
-		$storageEntity = new ($this->storageEntityClass)($identity->getAuthObjectId(), $token);
+		$storageEntity = new StorageEntity($identity->getAuthObjectId(), $token);
 		$storageEntity
 			->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
 			->setIp($this->httpRequest->getRemoteAddress())
@@ -92,7 +88,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
 		/** @var StorageEntity $storageEntity */
-		if (!$storageEntity = $this->em->getRepository($this->storageEntityClass)
+		if (!$storageEntity = $this->em->getRepository(StorageEntity::class)
 			->createQueryBuilder('e')
 			->where('e.token = :token')
 			->andWhere('e.validUntil >= :validUntil')
