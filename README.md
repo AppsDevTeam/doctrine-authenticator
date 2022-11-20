@@ -12,7 +12,7 @@
 composer require adt/doctrine-authenticator
 ```
 
-## Usage
+## Configuration
 
 ### 1) Neon configuration
 
@@ -26,7 +26,7 @@ services:
 			- setUserAgentCheck(true) # you can disable it for automatic tests for example
 ```
 
-Add new mapping via attributes:
+Add new mapping via attributes like this (if you are using nettrine):
 
 ```neon
 nettrine.orm.attributes:
@@ -34,7 +34,7 @@ nettrine.orm.attributes:
 		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src
 ```
 
-or if you are still using annotations:
+or via annotations:
 
 ```neon
 nettrine.orm.annotations:
@@ -202,6 +202,16 @@ class Authenticator extends DoctrineAuthenticator
 
 ### 5) Generate migrations
 
+for example like this:
+
 ```bash
 php bin/console migrations:diff
+```
+
+### Usage
+
+Just call `login` on security user as you are used to:
+
+```php
+$this->securityUser->login($email, $password);
 ```
