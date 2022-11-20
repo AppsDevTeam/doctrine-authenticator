@@ -208,7 +208,7 @@ for example like this:
 php bin/console migrations:diff
 ```
 
-### Usage
+## Usage
 
 Just call `login` on security user as you are used to:
 
