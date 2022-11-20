@@ -52,16 +52,25 @@ and adjust to your needs.
 namespace App\Model\Entities;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
-use App\Model\Entities\Attributes\Identifier;
 use Doctrine\ORM\Mapping\Column;
 use Doctrine\ORM\Mapping\Entity;
+use Doctrine\ORM\Mapping\GeneratedValue;
+use Doctrine\ORM\Mapping\Id;
 
 /** @Entity */
 #[Entity]
-class Identity implements DoctrineAuthenticatorIdentity
+class Identity extends BaseEntity implements DoctrineAuthenticatorIdentity
 {
-	use Identifier;
-
+	/**
+	 * @Id
+	 * @Column
+	 * @GeneratedValue
+	 */
+	#[Id]
+	#[Column]
+	#[GeneratedValue]
+	protected ?int $id;
+	
 	/** @Column(unique=true) */
 	#[Column(unique: true)]
 	protected string $email;
