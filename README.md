@@ -24,10 +24,22 @@ services:
 		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
 			- setUserAgentCheck(true) # you can disable it for automatic tests for example
-			
+```
+
+For those using attributes:
+
+```neon
 nettrine.orm.attributes:
 	mapping:
-		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src			
+		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src
+```
+
+or if you are still using annotations:
+
+```neon
+nettrine.orm.annotations:
+	mapping:
+		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src
 ```
 
 ### 2) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
