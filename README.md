@@ -44,6 +44,8 @@ nettrine.orm.annotations:
 
 ### 2) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
 
+and adjust to your needs.
+
 ```php
 <?php
 
@@ -51,19 +53,21 @@ namespace App\Model\Entities;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
 use App\Model\Entities\Attributes\Identifier;
-use Doctrine\ORM\Mapping as ORM;
+use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Entity;
 
-/** 
- * @ORM\Entity 
- */
-class Identity implements DoctrineAuthenticatorIdentity
+/** @Entity */
+#[Entity]
+class Identity implements DoctrineAuthenticatorIdentity, \ADT\DoctrineForms\Entity
 {
 	use Identifier;
 
-	/** @ORM\Column(type="string", unique=true) */
+	/** @Column(unique=true) */
+	#[Column]
 	protected string $email;
 
-	/** @ORM\Column(type="string") */
+	/** @Column */
+	#[Column(unique: true)]
 	protected string $password;
 
 	public function getRoles(): array
