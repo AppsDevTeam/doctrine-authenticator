@@ -21,34 +21,16 @@ services:
 	security.user: App\Model\Security\SecurityUser
 	security.userStorage: Nette\Bridges\SecurityHttp\CookieStorage
 	security.authenticator:
-		factory: App\Model\Security\Authenticator('14 days', App\Model\Entities\Session)
+		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
 			- setUserAgentCheck(true) # you can disable it for automatic tests for example
+			
+nettrine.orm.attributes:
+	mapping:
+		ADT\DoctrineAuthenticator: %appDir%/../vendor/adt/doctrine-authenticator/src			
 ```
 
-### 2) Create a Session entity extending ADT\DoctrineAuthenticator\StorageEntity
-
-```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Model\Entities;
-
-use ADT\DoctrineAuthenticator\StorageEntity;
-use App\Model\Entities\Attributes;
-use Doctrine\ORM\Mapping as ORM;
-
-/** 
- * @ORM\Entity 
- */
-class Session extends StorageEntity
-{
-	use Attributes\Identifier;
-}
-```
-
-### 3) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
+### 2) Create a Identity entity implementing ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity
 
 ```php
 <?php
@@ -106,7 +88,7 @@ class Identity implements DoctrineAuthenticatorIdentity
 }
 ```
 
-### 4) Create a SecurityUser service extending ADT\DoctrineAuthenticator\SecurityUser
+### 3) Create a SecurityUser service extending ADT\DoctrineAuthenticator\SecurityUser
 
 ```php
 <?php
@@ -124,7 +106,7 @@ class SecurityUser extends \ADT\DoctrineAuthenticator\SecurityUser
 }
 ```
 
-### 5) Create Authenticator extending ADT\DoctrineAuthenticator\DoctrineAuthenticator
+### 4) Create Authenticator extending ADT\DoctrineAuthenticator\DoctrineAuthenticator
 
 ```php
 <?php
