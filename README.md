@@ -70,7 +70,19 @@ class Identity implements DoctrineAuthenticatorIdentity
 	#[Column]
 	#[GeneratedValue]
 	protected ?int $id;
+
+	public function getId(): int
+	{
+		return $this->id;
+	}
+
+	public function __clone()
+	{
+		$this->id = null;
+	}
 	
+
+
 	/** @Column(unique=true) */
 	#[Column(unique: true)]
 	protected string $email;
@@ -78,11 +90,6 @@ class Identity implements DoctrineAuthenticatorIdentity
 	/** @Column */
 	#[Column]
 	protected string $password;
-
-	public function getRoles(): array
-	{
-		return [];
-	}
 
 	public function getEmail(): string
 	{
@@ -104,6 +111,13 @@ class Identity implements DoctrineAuthenticatorIdentity
 	{
 		$this->password = $password;
 		return $this;
+	}
+
+	
+	
+	public function getRoles(): array
+	{
+		return [];
 	}
 
 	public function getAuthObjectId(): string
