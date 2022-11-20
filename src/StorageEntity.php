@@ -23,7 +23,7 @@ class StorageEntity
 {
 	/**
 	 * @Id
-	 * @Column(type="integer")
+	 * @Column
 	 * @GeneratedValue
 	 */
 	#[Id]
