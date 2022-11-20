@@ -169,14 +169,13 @@ class Authenticator extends DoctrineAuthenticator
 {
 	public function __construct(
 		string $expiration,
-		string $storageEntityClass,
 		CookieStorage $cookieStorage,
 		Connection $connection,
 		Configuration $configuration,
 		Request $httpRequest,
 		protected readonly EntityManagerInterface $em,
 	) {
-		parent::__construct($expiration, $storageEntityClass, $cookieStorage, $connection, $configuration, $httpRequest);
+		parent::__construct($expiration, $cookieStorage, $connection, $configuration, $httpRequest);
 	}
 
 	public function authenticate(string $user, string $password): IIdentity
