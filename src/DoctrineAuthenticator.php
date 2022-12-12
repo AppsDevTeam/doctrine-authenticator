@@ -111,14 +111,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
 
 		// Create a new token to reduce the risk of theft
-		$token = self::generateToken();
-		$storageEntity->setRegeneratedAt(new DateTimeImmutable());
-		$storageEntity->setToken($token);
-		$identity->setId($token);
-
-		$this->em->flush();
-
-		$this->cookieStorage->saveAuthentication($identity);
+//		$token = self::generateToken();
+//		$storageEntity->setRegeneratedAt(new DateTimeImmutable());
+//		$storageEntity->setToken($token);
+//		$identity->setId($token);
+//
+//		$this->em->flush();
+//
+//		$this->cookieStorage->saveAuthentication($identity);
 
 		$this->storageEntity = $storageEntity;
 
