@@ -176,6 +176,10 @@ class Authenticator extends DoctrineAuthenticator
 		protected readonly EntityManagerInterface $em,
 	) {
 		parent::__construct($expiration, $cookieStorage, $connection, $configuration, $httpRequest);
+		
+		$this->onInvalidToken = function() {
+			// log probable fraud
+		};
 	}
 
 	public function authenticate(string $user, string $password): IIdentity
