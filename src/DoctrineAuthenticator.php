@@ -31,6 +31,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	
 	private bool $userAgentCheck = true;
 
+	protected ?\Closure $onInvalidToken = null;
+
 	abstract function getIdentity($id): ?IIdentity;
 
 	/**
@@ -96,6 +98,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->getQuery()
 			->getOneOrNullResult()
 		) {
+			if ($this->onInvalidToken) {
+				($this->onInvalidToken)();
+			}
 			return null;
 		}
 
@@ -109,16 +114,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		// Extend the expiration
 		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
-
-		// Create a new token to reduce the risk of theft
-//		$token = self::generateToken();
-//		$storageEntity->setRegeneratedAt(new DateTimeImmutable());
-//		$storageEntity->setToken($token);
-//		$identity->setId($token);
-//
-//		$this->em->flush();
-//
-//		$this->cookieStorage->saveAuthentication($identity);
+		$this->em->flush();
 
 		$this->storageEntity = $storageEntity;
 
