@@ -98,8 +98,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->getQuery()
 			->getOneOrNullResult()
 		) {
+			$this->cookieStorage->clearAuthentication(true);
 			if ($this->onInvalidToken) {
-				($this->onInvalidToken)();
+				($this->onInvalidToken)($identity->getId());
 			}
 			return null;
 		}
