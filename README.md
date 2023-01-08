@@ -177,7 +177,7 @@ class Authenticator extends DoctrineAuthenticator
 	) {
 		parent::__construct($expiration, $cookieStorage, $connection, $configuration, $httpRequest);
 		
-		$this->onInvalidToken = function() {
+		$this->onInvalidToken = function(string $token) {
 			// log probable fraud
 		};
 	}
