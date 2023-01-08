@@ -112,9 +112,12 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			return null;
 		}
 
-		// Extend the expiration
+		// Extend db token expiration
 		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
 		$this->em->flush();
+
+		// Extend cookie expiration
+		$this->cookieStorage->saveAuthentication($identity);
 
 		$this->storageEntity = $storageEntity;
 
