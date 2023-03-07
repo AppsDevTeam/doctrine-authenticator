@@ -47,10 +47,6 @@ class StorageEntity
 	#[Column]
 	protected DateTimeImmutable $validUntil;
 
-	/** @Column(nullable=true) */
-	#[Column(nullable: true)]
-	protected ?DateTimeImmutable $regeneratedAt = null;
-
 	/** @Column(length=15, nullable=true) */
 	#[Column(length: 15, nullable: true)]
 	protected ?string $ip = null;
