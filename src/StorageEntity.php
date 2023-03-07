@@ -14,11 +14,11 @@ use Doctrine\ORM\Mapping\Table;
 
 /**
  * @Entity
- * @Table(name="session", indexes={@Index(name="token_validUntil_idx", fields={"token", "validUntil"})})
+ * @Table(name="session", indexes={@Index(name="token_idx", fields={"token"})})
  */
 #[Entity]
 #[Table(name: "session")]
-#[Index(name: "token_validUntil_idx", fields: ["token", "validUntil"])]
+#[Index(name: "token_idx", fields: ["token"])]
 class StorageEntity
 {
 	/**
@@ -39,8 +39,8 @@ class StorageEntity
 	#[Column(length: 32)]
 	protected string $objectId;
 
-	/** @Column(length=32) */
-	#[Column(length: 32)]
+	/** @Column(length=32, unique=true) */
+	#[Column(length: 32, unique: true)]
 	protected string $token;
 
 	/** @Column */
@@ -59,9 +59,9 @@ class StorageEntity
 	#[Column(nullable: true)]
 	protected ?string $userAgent = null;
 
-	/** @Column(nullable=false, options={"default":false}) */
-	#[Column(nullable: false, options: ["default" => false])]
-	protected bool $isFraudDetected = false;
+	/** @Column(nullable=true) */
+	#[Column(type: 'json', nullable: true)]
+	protected $fraudData = null;
 
 	public function __construct($objectId, string $token)
 	{
@@ -97,17 +97,6 @@ class StorageEntity
 		return $this;
 	}
 
-	public function getRegeneratedAt(): ?DateTimeImmutable
-	{
-		return $this->regeneratedAt;
-	}
-
-	public function setRegeneratedAt(?DateTimeImmutable $regeneratedAt): self
-	{
-		$this->regeneratedAt = $regeneratedAt;
-		return $this;
-	}
-
 	public function getIp(): ?string
 	{
 		return $this->ip;
@@ -130,14 +119,9 @@ class StorageEntity
 		return $this;
 	}
 
-	public function getIsFraudDetected(): bool
+	public function setFraudData(string $ip, string $userAgent): self
 	{
-		return $this->isFraudDetected;
-	}
-
-	public function setIsFraudDetected(bool $isFraudDetected): self
-	{
-		$this->isFraudDetected = $isFraudDetected;
+		$this->fraudData = ['ip' => $ip, 'userAgent' => $userAgent];
 		return $this;
 	}
 }

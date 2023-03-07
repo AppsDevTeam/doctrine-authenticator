@@ -2,7 +2,10 @@
 
 namespace ADT\DoctrineAuthenticator;
 
+use Closure;
+use DateTime;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\Configuration;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,14 +27,17 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private string $expiration;
 	private CookieStorage $cookieStorage;
 	private Request $httpRequest;
+	private Connection $connection;
+	private Configuration $configuration;
 
 	private EntityManagerInterface $em;
 
 	private StorageEntity $storageEntity;
 	
-	private bool $userAgentCheck = true;
+	private bool $fraudDetection = true;
 
-	protected ?\Closure $onInvalidToken = null;
+	protected ?Closure $onInvalidToken = null;
+	protected ?Closure $onFraudDetection = null;
 
 	abstract function getIdentity($id): ?IIdentity;
 
@@ -47,16 +53,18 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	) {
 		$this->expiration = $expiration;
 		$this->httpRequest = $httpRequest;
+		$this->connection = $connection;
+		$this->configuration = $configuration;
 
-		$this->em = EntityManager::create($connection->getParams(), $configuration);
+		$this->em = $this->createEntityManager();
 
 		$this->cookieStorage = $cookieStorage;
 		$this->cookieStorage->setExpiration($expiration, false);
 	}
 
-	public function setUserAgentCheck(bool $userAgentCheck)
+	public function setFraudDetection(bool $fraudDetection)
 	{
-		$this->userAgentCheck = $userAgentCheck;
+		$this->fraudDetection = $fraudDetection;
 	}
 
 	/**
@@ -65,16 +73,22 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 */
 	public function sleepIdentity(IIdentity $identity): IIdentity
 	{
-		$token = self::generateToken();
+		do {
+			$token = Random::generate(32);
 
-		/** @var StorageEntity $storageEntity */
-		$storageEntity = new StorageEntity($identity->getAuthObjectId(), $token);
-		$storageEntity
-			->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
-			->setIp($this->httpRequest->getRemoteAddress())
-			->setUserAgent($this->httpRequest->getHeader('User-Agent'));
-		$this->em->persist($storageEntity);
-		$this->em->flush();
+			$storageEntity = new StorageEntity($identity->getAuthObjectId(), $token);
+			$storageEntity
+				->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
+				->setIp($this->httpRequest->getRemoteAddress())
+				->setUserAgent($this->httpRequest->getHeader('User-Agent'));
+			$this->em->persist($storageEntity);
+			try {
+				$this->em->flush();
+				break;
+			} catch (UniqueConstraintViolationException) {
+				$this->em = $this->createEntityManager();
+			}
+		} while (true);
 
 		$this->storageEntity = $storageEntity;
 
@@ -93,8 +107,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		if (!$storageEntity = $this->em->getRepository(StorageEntity::class)
 			->createQueryBuilder('e')
 			->where('e.token = :token')
-			->andWhere('e.validUntil >= :validUntil')
-			->setParameters(['token' => $identity->getId(), 'validUntil' => new DateTimeImmutable()])
+			->setParameters(['token' => $identity->getId()])
 			->getQuery()
 			->getOneOrNullResult()
 		) {
@@ -105,15 +118,35 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			return null;
 		}
 
-		// Token was probably stolen
-		if ($this->userAgentCheck && $storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
-			$storageEntity->setValidUntil(new DateTimeImmutable());
-			$storageEntity->setIsFraudDetected(true);
-			$this->em->flush();
+		if ($storageEntity->getValidUntil() < new DateTime()) {
+			$this->cookieStorage->clearAuthentication(true);
 			return null;
 		}
 
-		// Extend db token expiration
+		// Token was probably stolen
+		if (
+			$this->fraudDetection
+			&&
+			$storageEntity->getIp() !== $this->httpRequest->getRemoteAddress()
+			&&
+			$storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')
+		) {
+			$this->cookieStorage->clearAuthentication(true);
+
+			$storageEntity->setValidUntil(new DateTimeImmutable());
+			$storageEntity->setFraudData($this->httpRequest->getRemoteAddress(), $this->httpRequest->getHeader('User-Agent'));
+			$this->em->flush();
+
+			if ($this->onFraudDetection) {
+				($this->onFraudDetection)($storageEntity);
+			}
+
+			return null;
+		}
+
+		// Extend db token expiration and update IP and User Agent header
+		$storageEntity->setIp($this->httpRequest->getRemoteAddress());
+		$storageEntity->setUserAgent($this->httpRequest->getHeader('User-Agent'));
 		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
 		$this->em->flush();
 
@@ -140,8 +173,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return $this->storageEntity;
 	}
 
-	private static function generateToken(): string
+	/**
+	 * @throws ORMException
+	 */
+	private function createEntityManager(): EntityManager
 	{
-		return Random::generate(32);
+		return EntityManager::create($this->connection->getParams(), $this->configuration);
 	}
 }

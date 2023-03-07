@@ -1,10 +1,10 @@
 # Doctrine Authenticator
 
 - Allows you to use a Doctrine entity as a Nette identity
-- Use cookies instead of PHP sessions
-- Detect possible token theft and call onInvalidToken callback to log and prevent possible abuse
-- Save additional information like IP address and User-Agent header for better token theft detection
-- Invalidate token on different User-Agent headers
+- Uses cookies instead of PHP sessions
+- Saves IP address and User-Agent header for better abuse detection
+- Detects an invalid token and call onInvalidToken callback to log and prevent possible abuse
+- Invalidates token on different User-Agent header and IP address when fraudDetection is enabled and call onFraudDetection callback to log and prevent possible abuse
 
 ## Install
 
@@ -23,7 +23,7 @@ services:
 	security.authenticator:
 		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
-			- setUserAgentCheck(true) # you can disable it for automatic tests for example
+			- setFraudDetection(true) # you can disable it for automatic tests for example
 ```
 
 Add new mapping via attributes like this (if you are using nettrine):
