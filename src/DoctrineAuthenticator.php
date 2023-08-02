@@ -111,7 +111,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->getQuery()
 			->getOneOrNullResult()
 		) {
-			$this->cookieStorage->clearAuthentication(true);
+			if (!headers_sent()) {
+				$this->cookieStorage->clearAuthentication(true);
+			}
 			if ($this->onInvalidToken) {
 				($this->onInvalidToken)($identity->getId());
 			}
@@ -119,7 +121,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 
 		if ($storageEntity->getValidUntil() < new DateTime()) {
-			$this->cookieStorage->clearAuthentication(true);
+			if (!headers_sent()) {
+				$this->cookieStorage->clearAuthentication(true);
+			}
 			return null;
 		}
 
@@ -131,7 +135,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			&&
 			$storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')
 		) {
-			$this->cookieStorage->clearAuthentication(true);
+			if (!headers_sent()) {
+				$this->cookieStorage->clearAuthentication(true);
+			}
 
 			$storageEntity->setValidUntil(new DateTimeImmutable());
 			$storageEntity->setFraudData($this->httpRequest->getRemoteAddress(), $this->httpRequest->getHeader('User-Agent'));
@@ -151,7 +157,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$this->em->flush();
 
 		// Extend cookie expiration
-		$this->cookieStorage->saveAuthentication($identity);
+		if (!headers_sent()) {
+			$this->cookieStorage->saveAuthentication($identity);
+		}
 
 		$this->storageEntity = $storageEntity;
 
