@@ -13,19 +13,19 @@ use Doctrine\ORM\Exception\ORMException;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\OptimisticLockException;
 use Exception;
-use Nette\Bridges\SecurityHttp\CookieStorage;
 use Nette\Http\Request;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
 use Nette\Security\SimpleIdentity;
+use Nette\Security\UserStorage;
 use Nette\Utils\Random;
 use DateTimeImmutable;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
 	private string $expiration;
-	private CookieStorage $cookieStorage;
+	private UserStorage $cookieStorage;
 	private Request $httpRequest;
 	private Connection $connection;
 	private Configuration $configuration;
@@ -39,14 +39,15 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
 
-	abstract function getIdentity($id): ?IIdentity;
+	abstract protected function verifyCredentials(string $user, string $password): DoctrineAuthenticatorIdentity;
+	abstract protected function getIdentity(string $id, string $token, array $metadata): ?IIdentity;
 
 	/**
 	 * @throws Exception
 	 */
 	public function __construct(
 		?string $expiration,
-		CookieStorage $cookieStorage,
+		UserStorage $cookieStorage,
 		Connection $connection,
 		Configuration $configuration,
 		Request $httpRequest
@@ -62,7 +63,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$this->cookieStorage->setExpiration($expiration, false);
 	}
 
-	public function setFraudDetection(bool $fraudDetection)
+	public function setFraudDetection(bool $fraudDetection): void
 	{
 		$this->fraudDetection = $fraudDetection;
 	}
@@ -80,7 +81,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$storageEntity
 				->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
 				->setIp($this->httpRequest->getRemoteAddress())
-				->setUserAgent($this->httpRequest->getHeader('User-Agent'));
+				->setUserAgent($this->httpRequest->getHeader('User-Agent'))
+				->setMetadata($identity->getAuthMetadata());
+
 			$this->em->persist($storageEntity);
 			try {
 				$this->em->flush();
@@ -89,6 +92,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				$this->em = $this->createEntityManager();
 			}
 		} while (true);
+
+		$identity->setAuthToken($token);
 
 		$this->storageEntity = $storageEntity;
 
@@ -111,7 +116,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->getQuery()
 			->getOneOrNullResult()
 		) {
-			$this->cookieStorage->clearAuthentication(true);
+			if (!headers_sent()) {
+				$this->cookieStorage->clearAuthentication(true);
+			}
 			if ($this->onInvalidToken) {
 				($this->onInvalidToken)($identity->getId());
 			}
@@ -119,7 +126,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 
 		if ($storageEntity->getValidUntil() < new DateTime()) {
-			$this->cookieStorage->clearAuthentication(true);
+			if (!headers_sent()) {
+				$this->cookieStorage->clearAuthentication(true);
+			}
 			return null;
 		}
 
@@ -131,7 +140,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			&&
 			$storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')
 		) {
-			$this->cookieStorage->clearAuthentication(true);
+			if (!headers_sent()) {
+				$this->cookieStorage->clearAuthentication(true);
+			}
 
 			$storageEntity->setValidUntil(new DateTimeImmutable());
 			$storageEntity->setFraudData($this->httpRequest->getRemoteAddress(), $this->httpRequest->getHeader('User-Agent'));
@@ -151,18 +162,20 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$this->em->flush();
 
 		// Extend cookie expiration
-		$this->cookieStorage->saveAuthentication($identity);
+		if (!headers_sent()) {
+			$this->cookieStorage->saveAuthentication($identity);
+		}
 
 		$this->storageEntity = $storageEntity;
 
-		return $this->getIdentity($storageEntity->getObjectId());
+		return $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getToken(), $storageEntity->getMetadata());
 	}
 
 	/**
 	 * @throws OptimisticLockException
 	 * @throws ORMException
 	 */
-	public function clearIdentity()
+	public function clearIdentity(): void
 	{
 		$this->storageEntity->setValidUntil(new DateTimeImmutable());
 		$this->em->flush();
@@ -171,6 +184,15 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function getStorageEntity(): StorageEntity
 	{
 		return $this->storageEntity;
+	}
+
+	final public function authenticate(string $user, string $password, array $metadata = []): IIdentity
+	{
+		$user = $this->verifyCredentials($user, $password);
+
+		$user->setAuthMetadata($metadata);
+
+		return $user;
 	}
 
 	/**

@@ -20,15 +20,37 @@ class SecurityUser extends User
 
 	public function __construct(
 		Request $httpRequest,
-		IUserStorage $legacyStorage = null, 
-		IAuthenticator $authenticator = null, 
-		Authorizator $authorizator = null, 
-		UserStorage $storage = null)
+		private UserStorage $storage,
+		private ?IAuthenticator $authenticator = null,
+		private ?Authorizator $authorizator = null,
+	)
 	{
-		parent::__construct($legacyStorage, $authenticator, $authorizator, $storage);
+		parent::__construct($storage, $authenticator, $authorizator);
 
 		$this->httpRequest = $httpRequest;
 
 		$this->onLoggedOut[] = [$authenticator, 'clearIdentity'];
+	}
+
+	public function getToken(): string
+	{
+		$this->getIdentity();
+
+		[, $identity, ] = $this->storage->getState();
+
+		if ($identity) {
+			return $identity->getId();
+		}
+	}
+
+	public function getMetadata(): string
+	{
+		$this->getIdentity();
+
+		[, $identity, ] = $this->storage->getState();
+
+		if ($identity) {
+			return $identity->getId();
+		}
 	}
 }

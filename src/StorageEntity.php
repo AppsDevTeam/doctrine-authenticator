@@ -55,9 +55,13 @@ class StorageEntity
 	#[Column(nullable: true)]
 	protected ?string $userAgent = null;
 
-	/** @Column(nullable=true) */
+	/** @Column(type="json", nullable=true) */
 	#[Column(type: 'json', nullable: true)]
-	protected $fraudData = null;
+	protected ?array $fraudData = null;
+
+	/** @Column(type="json", nullable=true) */
+	#[Column(type: 'json', nullable: true)]
+	protected ?array $metadata = null;
 
 	public function __construct($objectId, string $token)
 	{
@@ -118,6 +122,17 @@ class StorageEntity
 	public function setFraudData(string $ip, string $userAgent): self
 	{
 		$this->fraudData = ['ip' => $ip, 'userAgent' => $userAgent];
+		return $this;
+	}
+
+	public function getMetadata(): ?array
+	{
+		return $this->metadata;
+	}
+
+	public function setMetadata(?array $metadata): self
+	{
+		$this->metadata = $metadata;
 		return $this;
 	}
 }
