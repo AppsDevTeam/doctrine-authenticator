@@ -7,7 +7,6 @@ namespace ADT\DoctrineAuthenticator;
 use Nette\Http\Request;
 use Nette\Security\Authorizator;
 use Nette\Security\IAuthenticator;
-use Nette\Security\IUserStorage;
 use Nette\Security\User;
 use Nette\Security\UserStorage;
 
@@ -20,9 +19,9 @@ class SecurityUser extends User
 
 	public function __construct(
 		Request $httpRequest,
-		private UserStorage $storage,
-		private ?IAuthenticator $authenticator = null,
-		private ?Authorizator $authorizator = null,
+		UserStorage $storage,
+		?IAuthenticator $authenticator = null,
+		?Authorizator $authorizator = null,
 	)
 	{
 		parent::__construct($storage, $authenticator, $authorizator);
@@ -30,27 +29,5 @@ class SecurityUser extends User
 		$this->httpRequest = $httpRequest;
 
 		$this->onLoggedOut[] = [$authenticator, 'clearIdentity'];
-	}
-
-	public function getToken(): string
-	{
-		$this->getIdentity();
-
-		[, $identity, ] = $this->storage->getState();
-
-		if ($identity) {
-			return $identity->getId();
-		}
-	}
-
-	public function getMetadata(): string
-	{
-		$this->getIdentity();
-
-		[, $identity, ] = $this->storage->getState();
-
-		if ($identity) {
-			return $identity->getId();
-		}
 	}
 }
