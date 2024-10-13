@@ -5,6 +5,7 @@ namespace ADT\DoctrineAuthenticator;
 use Closure;
 use DateTime;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\Configuration;
 use Doctrine\ORM\EntityManager;
@@ -112,7 +113,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		if (!$storageEntity = $this->em->getRepository(StorageEntity::class)
 			->createQueryBuilder('e')
 			->where('e.token = :token')
-			->setParameters(['token' => $identity->getId()])
+			->setParameter('token', $identity->getId())
 			->getQuery()
 			->getOneOrNullResult()
 		) {
@@ -200,6 +201,6 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 */
 	private function createEntityManager(): EntityManager
 	{
-		return EntityManager::create($this->connection->getParams(), $this->configuration);
+		return new EntityManager(DriverManager::getConnection($this->connection->getParams()), $this->configuration);
 	}
 }
