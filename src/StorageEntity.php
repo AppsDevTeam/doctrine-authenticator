@@ -12,54 +12,37 @@ use Doctrine\ORM\Mapping\Id;
 use Doctrine\ORM\Mapping\Index;
 use Doctrine\ORM\Mapping\Table;
 
-/**
- * @Entity
- * @Table(name="session", indexes={@Index(name="token_idx", fields={"token"})})
- */
 #[Entity]
 #[Table(name: "session")]
 #[Index(name: "token_idx", fields: ["token"])]
 class StorageEntity
 {
-	/**
-	 * @Id
-	 * @Column
-	 * @GeneratedValue
-	 */
 	#[Id]
 	#[Column]
 	#[GeneratedValue]
 	protected ?int $id;
 
-	/** @Column */
 	#[Column]
 	protected DateTimeImmutable $createdAt;
 
-	/** @Column(length=32) */
 	#[Column(length: 32)]
 	protected string $objectId;
 
-	/** @Column(length=32, unique=true) */
 	#[Column(length: 32, unique: true)]
 	protected string $token;
 
-	/** @Column */
 	#[Column]
 	protected DateTimeImmutable $validUntil;
 
-	/** @Column(length=15, nullable=true) */
 	#[Column(length: 15, nullable: true)]
 	protected ?string $ip = null;
 
-	/** @Column(nullable=true) */
 	#[Column(nullable: true)]
 	protected ?string $userAgent = null;
 
-	/** @Column(type="json", nullable=true) */
 	#[Column(type: 'json', nullable: true)]
 	protected ?array $fraudData = null;
 
-	/** @Column(type="json", nullable=true) */
 	#[Column(type: 'json', nullable: true)]
 	protected ?array $metadata = null;
 
