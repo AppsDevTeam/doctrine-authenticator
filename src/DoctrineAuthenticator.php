@@ -20,6 +20,7 @@ use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
 use Nette\Security\SimpleIdentity;
 use Nette\Security\UserStorage;
+use Nette\Utils\Json;
 use Nette\Utils\Random;
 use DateTimeImmutable;
 
@@ -176,9 +177,26 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 * @throws OptimisticLockException
 	 * @throws ORMException
 	 */
-	public function clearIdentity(): void
+	public function clearIdentity(int|SecurityUser $objectId, array $metadata = []): void
 	{
-		$this->storageEntity->setValidUntil(new DateTimeImmutable());
+		if (is_int($objectId)) {
+			$qb = $this->em->getRepository(StorageEntity::class)
+				->createQueryBuilder('e')
+				->where('e.validUntil > :now')
+				->setParameter('now', new DateTimeImmutable())
+				->andWhere('e.objectId = :objectId')
+				->setParameter('objectId', $objectId);
+			if ($metadata) {
+				$qb->andWhere('JSON_CONTAINS(e.metadata, :metadata) = 1')
+					->setParameter('metadata', Json::encode($metadata));
+			}
+			/** @var StorageEntity $_session */
+			foreach ($qb->getQuery()->getResult() as $_session) {
+				$_session->setValidUntil(new DateTimeImmutable());
+			}
+		} else {
+			$this->storageEntity->setValidUntil(new DateTimeImmutable());
+		}
 		$this->em->flush();
 	}
 	
@@ -190,9 +208,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	final public function authenticate(string $user, string $password, array $metadata = []): IIdentity
 	{
 		$user = $this->verifyCredentials($user, $password);
-
 		$user->setAuthMetadata($metadata);
-
 		return $user;
 	}
 
