@@ -21,6 +21,7 @@ use Nette\Security\IIdentity;
 use Nette\Security\SimpleIdentity;
 use Nette\Security\UserStorage;
 use Nette\Utils\Json;
+use Nette\Utils\JsonException;
 use Nette\Utils\Random;
 use DateTimeImmutable;
 
@@ -41,7 +42,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
 
-	abstract protected function verifyCredentials(string $user, string $password): DoctrineAuthenticatorIdentity;
+	abstract protected function verifyCredentials(string $user, string $password, ?string $context): DoctrineAuthenticatorIdentity;
 	abstract protected function getIdentity(string $id, string $token, array $metadata): ?IIdentity;
 
 	/**
@@ -72,7 +73,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	/**
 	 * @param DoctrineAuthenticatorIdentity $identity
-	 * @throws Exception
+	 * @throws Exception|ORMException
 	 */
 	public function sleepIdentity(IIdentity $identity): IIdentity
 	{
@@ -176,6 +177,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	/**
 	 * @throws OptimisticLockException
 	 * @throws ORMException
+	 * @throws JsonException
 	 */
 	public function clearIdentity(int|SecurityUser $objectId, array $metadata = []): void
 	{
@@ -205,16 +207,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return $this->storageEntity;
 	}
 
-	final public function authenticate(string $user, string $password, array $metadata = []): IIdentity
+	final public function authenticate(string $username, string $password, ?string $context = null, array $metadata = []): IIdentity
 	{
-		$user = $this->verifyCredentials($user, $password);
+		$user = $this->verifyCredentials($username, $password, $context);
 		$user->setAuthMetadata($metadata);
+		$user->setContext($context);
 		return $user;
 	}
 
-	/**
-	 * @throws ORMException
-	 */
 	private function createEntityManager(): EntityManager
 	{
 		return new EntityManager(DriverManager::getConnection($this->connection->getParams()), $this->configuration);
