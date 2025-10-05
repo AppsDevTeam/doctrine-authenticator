@@ -3,6 +3,7 @@
 namespace ADT\DoctrineAuthenticator;
 
 use Nette\Security\IIdentity;
+use Nette\Security\Resource;
 
 interface DoctrineAuthenticatorIdentity extends IIdentity
 {
@@ -10,5 +11,5 @@ interface DoctrineAuthenticatorIdentity extends IIdentity
 	public function setAuthToken(string $token): void;
 	public function getAuthMetadata(): array;
 	public function setAuthMetadata(array $metadata): void;
-	public function setContext(string $context): void;
+	public function setContext(string|null|Resource $context): void;
 }

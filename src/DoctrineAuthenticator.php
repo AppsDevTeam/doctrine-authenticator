@@ -18,6 +18,7 @@ use Nette\Http\Request;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
+use Nette\Security\Resource;
 use Nette\Security\SimpleIdentity;
 use Nette\Security\UserStorage;
 use Nette\Utils\Json;
@@ -42,7 +43,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
 
-	abstract protected function verifyCredentials(string $user, string $password, ?string $context, array $metadata = []): DoctrineAuthenticatorIdentity;
+	abstract protected function verifyCredentials(string $user, string $password, string|null|Resource $context, array $metadata = []): DoctrineAuthenticatorIdentity;
 	abstract protected function getIdentity(string $id, string $token, array $metadata): ?IIdentity;
 
 	/**
@@ -207,7 +208,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return $this->storageEntity;
 	}
 
-	final public function authenticate(string $username, string $password, ?string $context = null, array $metadata = []): IIdentity
+	final public function authenticate(string $username, string $password, string|null|Resource $context = null, array $metadata = []): IIdentity
 	{
 		$user = $this->verifyCredentials($username, $password, $context, $metadata);
 		$user->setAuthMetadata($metadata);
