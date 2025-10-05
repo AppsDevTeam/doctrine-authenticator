@@ -44,7 +44,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onFraudDetection = null;
 
 	abstract protected function verifyCredentials(string $user, string $password, string|null|Resource $context, array $metadata = []): DoctrineAuthenticatorIdentity;
-	abstract protected function getIdentity(string $id, string $token, array $metadata): ?IIdentity;
+	abstract protected function getIdentity(string $id, string $token, string|null|Resource $context, array $metadata): ?IIdentity;
 
 	/**
 	 * @throws Exception
@@ -86,6 +86,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
 				->setIp($this->httpRequest->getRemoteAddress())
 				->setUserAgent($this->httpRequest->getHeader('User-Agent'))
+				->setContext($identity->getContext())
 				->setMetadata($identity->getAuthMetadata());
 
 			$this->em->persist($storageEntity);
@@ -172,7 +173,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->storageEntity = $storageEntity;
 
-		return $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getToken(), $storageEntity->getMetadata());
+		return $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getToken(), $storageEntity->getContext(), $storageEntity->getMetadata());
 	}
 
 	/**

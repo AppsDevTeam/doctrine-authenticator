@@ -11,6 +11,7 @@ use Doctrine\ORM\Mapping\GeneratedValue;
 use Doctrine\ORM\Mapping\Id;
 use Doctrine\ORM\Mapping\Index;
 use Doctrine\ORM\Mapping\Table;
+use Nette\Security\Resource;
 
 #[Entity]
 #[Table(name: "session")]
@@ -31,6 +32,9 @@ class StorageEntity
 	#[Column(length: 32, unique: true)]
 	protected string $token;
 
+	#[Column(nullable: true)]
+	protected ?string $context = null;
+
 	#[Column]
 	protected DateTimeImmutable $validUntil;
 
@@ -45,6 +49,8 @@ class StorageEntity
 
 	#[Column(type: 'json', nullable: true)]
 	protected ?array $metadata = null;
+
+	protected null|false|string $contextEnum = null;
 
 	public function __construct($objectId, string $token)
 	{
@@ -116,6 +122,29 @@ class StorageEntity
 	public function setMetadata(?array $metadata): self
 	{
 		$this->metadata = $metadata;
+		return $this;
+	}
+
+	public function getContext(): string|null|Resource
+	{
+		if ($this->contextEnum === null) {
+			$this->contextEnum = false;
+			foreach (get_declared_classes() as $_class) {
+				if (in_array(Resource::class, class_implements($_class))) {
+					$this->contextEnum = $_class;
+					break;
+				}
+			}
+		}
+		if ($this->contextEnum) {
+			return $this->contextEnum::from($this->context);
+		}
+		return $this->context;
+	}
+
+	public function setContext(string|null|Resource $context): self
+	{
+		$this->context = $context instanceof Resource ? $context->getResourceId() : $context;
 		return $this;
 	}
 }
