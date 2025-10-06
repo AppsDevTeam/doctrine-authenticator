@@ -50,7 +50,7 @@ class StorageEntity
 	#[Column(type: 'json', nullable: true)]
 	protected ?array $metadata = null;
 
-	protected null|false|string $contextEnum = null;
+	protected ?string $contextEnum = null;
 
 	public function __construct($objectId, string $token)
 	{
@@ -125,26 +125,23 @@ class StorageEntity
 		return $this;
 	}
 
-	public function getContext(): string|null|Resource
+	public function getContext(): ?Resource
 	{
 		if ($this->contextEnum === null) {
-			$this->contextEnum = false;
 			foreach (get_declared_classes() as $_class) {
 				if (in_array(Resource::class, class_implements($_class))) {
 					$this->contextEnum = $_class;
-					break;
+					return $this->contextEnum::from($this->context);
 				}
 			}
+			throw new \Exception('Class ' . Resource::class . ' not implemented.');
 		}
-		if ($this->contextEnum) {
-			return $this->contextEnum::from($this->context);
-		}
-		return $this->context;
+		return $this->contextEnum::from($this->context);
 	}
 
-	public function setContext(string|null|Resource $context): self
+	public function setContext(?Resource $context): self
 	{
-		$this->context = $context instanceof Resource ? $context->getResourceId() : $context;
+		$this->context = $context->getResourceId();
 		return $this;
 	}
 }

@@ -43,8 +43,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
 
-	abstract protected function verifyCredentials(string $user, string $password, string|null|Resource $context, array $metadata = []): DoctrineAuthenticatorIdentity;
-	abstract protected function getIdentity(string $id, string $token, string|null|Resource $context, array $metadata): ?IIdentity;
+	abstract protected function verifyCredentials(string $user, string $password, ?Resource $context, array $metadata = []): DoctrineAuthenticatorIdentity;
+	abstract protected function getIdentity(string $id, string $token, ?Resource $context, array $metadata): ?IIdentity;
 
 	/**
 	 * @throws Exception
@@ -209,7 +209,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return $this->storageEntity;
 	}
 
-	final public function authenticate(string $username, string $password, string|null|Resource $context = null, array $metadata = []): IIdentity
+	final public function authenticate(string $username, string $password, ?Resource $context = null, array $metadata = []): IIdentity
 	{
 		$user = $this->verifyCredentials($username, $password, $context, $metadata);
 		$user->setAuthMetadata($metadata);
