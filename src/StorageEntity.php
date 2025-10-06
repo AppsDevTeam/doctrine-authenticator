@@ -127,6 +127,10 @@ class StorageEntity
 
 	public function getContext(): ?Resource
 	{
+		if (!$this->context) {
+			return $this->context;
+		}
+		
 		if ($this->contextEnum === null) {
 			foreach (get_declared_classes() as $_class) {
 				if (in_array(Resource::class, class_implements($_class))) {
