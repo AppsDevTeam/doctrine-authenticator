@@ -145,7 +145,7 @@ class StorageEntity
 
 	public function setContext(?Resource $context): self
 	{
-		$this->context = $context->getResourceId();
+		$this->context = $context?->getResourceId();
 		return $this;
 	}
 }
