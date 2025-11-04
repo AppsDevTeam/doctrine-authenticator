@@ -15,6 +15,6 @@ interface DoctrineAuthenticatorIdentity extends IIdentity
 	public function getAuthMetadata(): array;
 	public function setAuthMetadata(array $metadata): void;
 	
-	public function getContext(): ?Resource;
-	public function setContext(?Resource $context): void;
+	public function getContext(): ?string;
+	public function setContext(?string $context): static;
 }

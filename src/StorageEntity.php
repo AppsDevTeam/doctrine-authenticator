@@ -125,27 +125,29 @@ class StorageEntity
 		return $this;
 	}
 
-	public function getContext(): ?Resource
+	public function getContext(): ?string
 	{
-		if (!$this->context) {
-			return $this->context;
-		}
-		
-		if ($this->contextEnum === null) {
-			foreach (get_declared_classes() as $_class) {
-				if (in_array(Resource::class, class_implements($_class))) {
-					$this->contextEnum = $_class;
-					return $this->contextEnum::from($this->context);
-				}
-			}
-			throw new \Exception('Class ' . Resource::class . ' not implemented.');
-		}
-		return $this->contextEnum::from($this->context);
+		return $this->context;
+//
+//		if (!$this->context) {
+//			return $this->context;
+//		}
+//
+//		if ($this->contextEnum === null) {
+//			foreach (get_declared_classes() as $_class) {
+//				if (in_array(Resource::class, class_implements($_class))) {
+//					$this->contextEnum = $_class;
+//					return $this->contextEnum::from($this->context);
+//				}
+//			}
+//			throw new \Exception('Class ' . Resource::class . ' not implemented.');
+//		}
+//		return $this->contextEnum::from($this->context);
 	}
 
-	public function setContext(?Resource $context): self
+	public function setContext(?string $context): static
 	{
-		$this->context = $context?->getResourceId();
+		$this->context = $context;
 		return $this;
 	}
 }
