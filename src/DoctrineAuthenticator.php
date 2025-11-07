@@ -42,8 +42,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
 
-	abstract protected function verifyCredentials(string $user, string $password, ?string $context = null, array $metadata = []): DoctrineAuthenticatorIdentity;
-	abstract protected function findIdentityByCredentials(string $identifier, ?string $context = null, array $metadata = []): ?IIdentity;
+	abstract protected function verifyCredentials(string $user, ?string $password = null, ?string $context = null, array $metadata = []): DoctrineAuthenticatorIdentity;
 
 	/**
 	 * @throws Exception
@@ -86,6 +85,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				->setIp($this->httpRequest->getRemoteAddress())
 				->setUserAgent($this->httpRequest->getHeader('User-Agent'))
 				->setContext($identity->getContext())
+				->setObjectClass(get_class($identity))
 				->setMetadata($identity->getAuthMetadata());
 
 			$this->em->persist($storageEntity);
@@ -166,7 +166,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->storageEntity = $storageEntity;
 
-		$identity = $this->findIdentityByCredentials($storageEntity->getObjectId(), $storageEntity->getContext(), $storageEntity->getMetadata());
+		$identity = $this->em->getRepository($storageEntity->getObjectClass())->find($storageEntity->getObjectId());
 		$identity->setAuthToken($storageEntity->getToken());
 		$this->initIdentity($identity, $storageEntity->getMetadata());
 		return $identity;
@@ -215,13 +215,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->getOneOrNullResult();
 	}
 
-	public function findIdentity(string $token): ?IIdentity
-	{
-		$storageEntity = $this->findSession($token);
-		return $this->findIdentityByCredentials($storageEntity->getObjectId(), $storageEntity->getContext(), $storageEntity->getMetadata());
-	}
-
-	final public function authenticate(string $username, string $password, ?string $context = null, array $metadata = []): IIdentity
+	final public function authenticate(string $username, ?string $password = null, ?string $context = null, array $metadata = []): IIdentity
 	{
 		$user = $this->verifyCredentials($username, $password, $context, $metadata);
 		$user->setAuthMetadata($metadata);

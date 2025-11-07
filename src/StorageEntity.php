@@ -28,6 +28,9 @@ class StorageEntity
 
 	#[Column(length: 32)]
 	protected string $objectId;
+	
+	#[Column]
+	protected string $objectClass;
 
 	#[Column(length: 32, unique: true)]
 	protected string $token;
@@ -148,6 +151,17 @@ class StorageEntity
 	public function setContext(?string $context): static
 	{
 		$this->context = $context;
+		return $this;
+	}
+
+	public function getObjectClass(): string
+	{
+		return $this->objectClass;
+	}
+
+	public function setObjectClass(string $objectClass): StorageEntity
+	{
+		$this->objectClass = $objectClass;
 		return $this;
 	}
 }
