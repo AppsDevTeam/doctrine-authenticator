@@ -43,7 +43,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onFraudDetection = null;
 
 	abstract protected function verifyCredentials(string $user, string $password, ?string $context = null, array $metadata = []): DoctrineAuthenticatorIdentity;
-	abstract protected function getIdentity(string $id, ?string $context): ?IIdentity;
+	abstract protected function findIdentityByCredentials(string $identifier, ?string $context = null, array $metadata = []): ?IIdentity;
 
 	/**
 	 * @throws Exception
@@ -166,7 +166,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->storageEntity = $storageEntity;
 
-		$identity = $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getContext());
+		$identity = $this->findIdentityByCredentials($storageEntity->getObjectId(), $storageEntity->getContext(), $storageEntity->getMetadata());
 		$identity->setAuthToken($storageEntity->getToken());
 		$this->initIdentity($identity, $storageEntity->getMetadata());
 		return $identity;
@@ -218,7 +218,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function findIdentity(string $token): ?IIdentity
 	{
 		$storageEntity = $this->findSession($token);
-		return $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getContext());
+		return $this->findIdentityByCredentials($storageEntity->getObjectId(), $storageEntity->getContext(), $storageEntity->getMetadata());
 	}
 
 	final public function authenticate(string $username, string $password, ?string $context = null, array $metadata = []): IIdentity
