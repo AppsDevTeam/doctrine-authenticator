@@ -18,7 +18,6 @@ use Nette\Http\Request;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
-use Nette\Security\Resource;
 use Nette\Security\SimpleIdentity;
 use Nette\Security\UserStorage;
 use Nette\Utils\Json;
@@ -44,7 +43,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	protected ?Closure $onFraudDetection = null;
 
 	abstract protected function verifyCredentials(string $user, string $password, ?string $context = null, array $metadata = []): DoctrineAuthenticatorIdentity;
-	abstract protected function getIdentity(string $id, string $token, ?string $context, array $metadata): ?IIdentity;
+	abstract protected function getIdentity(string $id, ?string $context): ?IIdentity;
 
 	/**
 	 * @throws Exception
@@ -114,13 +113,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
 		/** @var StorageEntity $storageEntity */
-		if (!$storageEntity = $this->em->getRepository(StorageEntity::class)
-			->createQueryBuilder('e')
-			->where('e.token = :token')
-			->setParameter('token', $identity->getId())
-			->getQuery()
-			->getOneOrNullResult()
-		) {
+		if (!$storageEntity = $this->findSession($identity->getId())) {
 			if (!headers_sent()) {
 				$this->cookieStorage->clearAuthentication(true);
 			}
@@ -173,7 +166,10 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->storageEntity = $storageEntity;
 
-		return $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getToken(), $storageEntity->getContext(), $storageEntity->getMetadata());
+		$identity = $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getContext());
+		$identity->setAuthToken($storageEntity->getToken());
+		$this->initIdentity($identity, $storageEntity->getMetadata());
+		return $identity;
 	}
 
 	/**
@@ -208,6 +204,22 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	{
 		return $this->storageEntity;
 	}
+	
+	protected function findSession(string $token): ?StorageEntity
+	{
+		return $this->em->getRepository(StorageEntity::class)
+			->createQueryBuilder('e')
+			->where('e.token = :token')
+			->setParameter('token', $token)
+			->getQuery()
+			->getOneOrNullResult();
+	}
+
+	public function findIdentity(string $token): ?IIdentity
+	{
+		$storageEntity = $this->findSession($token);
+		return $this->getIdentity($storageEntity->getObjectId(), $storageEntity->getContext());
+	}
 
 	final public function authenticate(string $username, string $password, ?string $context = null, array $metadata = []): IIdentity
 	{
@@ -219,5 +231,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private function createEntityManager(): EntityManager
 	{
 		return new EntityManager(DriverManager::getConnection($this->connection->getParams()), $this->configuration);
+	}
+
+	protected function initIdentity(IIdentity $identity, array $metadata): void
+	{
 	}
 }
