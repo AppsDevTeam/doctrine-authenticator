@@ -4,10 +4,8 @@ namespace ADT\DoctrineAuthenticator;
 
 use Closure;
 use DateTime;
-use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\ORM\Configuration;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Exception\ORMException;
@@ -30,10 +28,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private string $expiration;
 	private UserStorage $cookieStorage;
 	private Request $httpRequest;
-	private Connection $connection;
-	private Configuration $configuration;
 
 	private EntityManagerInterface $em;
+	private EntityManagerInterface $internalEm;
 
 	private StorageEntity $storageEntity;
 	
@@ -50,16 +47,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function __construct(
 		?string $expiration,
 		UserStorage $cookieStorage,
-		Connection $connection,
-		Configuration $configuration,
+		EntityManagerInterface $em,
 		Request $httpRequest
 	) {
 		$this->expiration = $expiration;
 		$this->httpRequest = $httpRequest;
-		$this->connection = $connection;
-		$this->configuration = $configuration;
+		$this->em = $em;
 
-		$this->em = $this->createEntityManager();
+		$this->internalEm = $this->createEntityManager();
 
 		$this->cookieStorage = $cookieStorage;
 		$this->cookieStorage->setExpiration($expiration, false);
@@ -88,12 +83,12 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				->setObjectClass(get_class($identity))
 				->setMetadata($identity->getAuthMetadata());
 
-			$this->em->persist($storageEntity);
+			$this->internalEm->persist($storageEntity);
 			try {
-				$this->em->flush();
+				$this->internalEm->flush();
 				break;
 			} catch (UniqueConstraintViolationException) {
-				$this->em = $this->createEntityManager();
+				$this->internalEm = $this->createEntityManager();
 			}
 		} while (true);
 
@@ -144,7 +139,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 			$storageEntity->setValidUntil(new DateTimeImmutable());
 			$storageEntity->setFraudData($this->httpRequest->getRemoteAddress(), $this->httpRequest->getHeader('User-Agent'));
-			$this->em->flush();
+			$this->internalEm->flush();
 
 			if ($this->onFraudDetection) {
 				($this->onFraudDetection)($storageEntity);
@@ -157,7 +152,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$storageEntity->setIp($this->httpRequest->getRemoteAddress());
 		$storageEntity->setUserAgent($this->httpRequest->getHeader('User-Agent'));
 		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
-		$this->em->flush();
+		$this->internalEm->flush();
 
 		// Extend cookie expiration
 		if (!headers_sent()) {
@@ -180,7 +175,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function clearIdentity(int|SecurityUser $objectId, array $metadata = []): void
 	{
 		if (is_int($objectId)) {
-			$qb = $this->em->getRepository(StorageEntity::class)
+			$qb = $this->internalEm->getRepository(StorageEntity::class)
 				->createQueryBuilder('e')
 				->where('e.validUntil > :now')
 				->setParameter('now', new DateTimeImmutable())
@@ -197,7 +192,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		} else {
 			$this->storageEntity->setValidUntil(new DateTimeImmutable());
 		}
-		$this->em->flush();
+		$this->internalEm->flush();
 	}
 	
 	public function getStorageEntity(): StorageEntity
@@ -207,7 +202,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	
 	protected function findSession(string $token): ?StorageEntity
 	{
-		return $this->em->getRepository(StorageEntity::class)
+		return $this->internalEm->getRepository(StorageEntity::class)
 			->createQueryBuilder('e')
 			->where('e.token = :token')
 			->setParameter('token', $token)
@@ -224,7 +219,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	private function createEntityManager(): EntityManager
 	{
-		return new EntityManager(DriverManager::getConnection($this->connection->getParams()), $this->configuration);
+		return new EntityManager(DriverManager::getConnection($this->em->getConnection()->getParams()), $this->em->getConfiguration());
 	}
 
 	protected function initIdentity(IIdentity $identity, array $metadata): void
