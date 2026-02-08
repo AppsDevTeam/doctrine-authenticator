@@ -32,6 +32,7 @@ trait OnetimeTokenAuthenticatorTrait
 	 */
 	protected function verifyCredentials(string $user, ?string $password = null, ?string $context = null, array $metadata = []): DoctrineAuthenticatorIdentity
 	{
+		$onetimeToken = null;
 		if (!$password) {
 			/** @var OnetimeToken $onetimeToken */
 			if (!$onetimeToken = $this->getOnetimeTokenService()->findToken(OnetimeTokenTypeEnum::LOGIN, $user, markAsUsed: false)) {
@@ -42,8 +43,6 @@ trait OnetimeTokenAuthenticatorTrait
 			if (!$identity = $this->getEntityManager()->getRepository($onetimeToken->getObjectClass())->find($onetimeToken->getObjectId())) {
 				throw new AuthenticationException();
 			}
-			
-			$identity->setOnetimeToken($onetimeToken);
 		} else {
 			/** @var Identity $identity */
 			if (!$identity = $this->findIdentity($user, $context, $metadata)) {
@@ -54,7 +53,7 @@ trait OnetimeTokenAuthenticatorTrait
 				if (
 					!$this->verifyPassword($password, (string) $identity->getPassword())
 					&&
-					!$this->getOnetimeTokenService()->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
+					!$onetimeToken = $this->getOnetimeTokenService()->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
 				) {
 					throw new AuthenticationException();
 				}
@@ -64,6 +63,8 @@ trait OnetimeTokenAuthenticatorTrait
 		if (!$identity->getIsActive()) {
 			throw new AuthenticationException();
 		}
+
+		$identity->setOnetimeToken($onetimeToken);
 
 		$this->validateIdentity($identity, $context, $metadata);
 
