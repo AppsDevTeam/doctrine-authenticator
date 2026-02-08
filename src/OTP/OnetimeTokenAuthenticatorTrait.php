@@ -60,10 +60,6 @@ trait OnetimeTokenAuthenticatorTrait
 			}
 		}
 
-		if (!$identity->getIsActive()) {
-			throw new AuthenticationException();
-		}
-
 		$identity->setOnetimeToken($onetimeToken);
 
 		$this->validateIdentity($identity, $context, $metadata);
