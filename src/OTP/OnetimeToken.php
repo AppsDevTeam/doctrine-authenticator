@@ -4,10 +4,19 @@ declare(strict_types=1);
 namespace ADT\DoctrineAuthenticator\OTP;
 
 use ADT\DoctrineComponents\Entities\Entity;
+use ADT\DoctrineComponents\Entities\Traits\Identifier;
 use DateTimeImmutable;
+use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Entity as DoctrineEntity;
 
-interface OnetimeToken extends Entity
+/**
+ * @internal Use OnetimeTokenService to work with onetime tokens
+ */
+#[DoctrineEntity]
+final class OnetimeToken implements Entity
 {
+	use Identifier;
+
 	/*
 	 * Konstanty pro nastaveni jak dlouho je validni request pro obnovu hesla a jak dlouho je validni request v pripade
 	 * vytvareni novehe uzivatele
@@ -15,22 +24,133 @@ interface OnetimeToken extends Entity
 	const int PASSWORD_RECOVERY_VALID_FOR = 24; //hour
 	const int PASSWORD_CREATION_VALID_FOR = 72; //hours (3 days)
 
-	public function getToken(): string;
-	public function setToken(string $token): static;
-	public function getObjectId(): ?int;
-	public function setObjectId(?int $objectId): static;
-	public function getUsedAt(): ?DateTimeImmutable;
-	public function setUsedAt(?DateTimeImmutable $usedAt): static;
-	public function setValidUntil(DateTimeImmutable $validUntil): static;
-	public function getValidUntil(): DateTimeImmutable;
-	public function getType(): string;
-	public function setType(string $type): static;
-	public function getIpAddress(): string;
-	public function setIpAddress(string $ipAddress): static;
-	public function getObjectClass(): ?string;
-	public function setObjectClass(?string $objectClass): static;
-	public function getIdentifier(): ?string;
-	public function setIdentifier(?string $identifier): static;
+	#[Column(nullable: false)]
+	protected string $token;
 
-	public function isValid(): bool;
+	#[Column(nullable: false)]
+	protected string $type;
+
+	#[Column(nullable: true)]
+	protected ?int $objectId = null;
+
+	#[Column(nullable: true)]
+	protected ?string $objectClass = null;
+
+	#[Column(nullable: true)]
+	protected ?DateTimeImmutable $usedAt = null;
+
+	#[Column(nullable: false)]
+	protected DateTimeImmutable $validUntil;
+
+	#[Column(nullable: false)]
+	protected string $ipAddress;
+
+	#[Column(nullable: true)]
+	protected ?string $identifier = null;
+
+	#[Column(nullable: false)]
+	protected DateTimeImmutable $createdAt;
+
+	public function __construct()
+	{
+		$this->createdAt = new DateTimeImmutable();
+	}
+
+	public function getToken(): string
+	{
+		return $this->token;
+	}
+
+	public function setToken(string $token): static
+	{
+		$this->token = $token;
+		return $this;
+	}
+
+	public function getUsedAt(): ?DateTimeImmutable
+	{
+		return $this->usedAt;
+	}
+
+	public function setUsedAt(?DateTimeImmutable $usedAt): static
+	{
+		$this->usedAt = $usedAt;
+		return $this;
+	}
+
+	public function setValidUntil(DateTimeImmutable $validUntil): static
+	{
+		$this->validUntil = $validUntil;
+		return $this;
+	}
+
+	public function getValidUntil(): DateTimeImmutable
+	{
+		return $this->validUntil;
+	}
+
+	public function isValid(): bool
+	{
+		// Omezujeme jenom validitu u password Recovery
+		if ($this->validUntil < (new DateTimeImmutable('now'))) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public function getType(): string
+	{
+		return $this->type;
+	}
+
+	public function setType(string $type): static
+	{
+		$this->type = $type;
+		return $this;
+	}
+
+	public function getObjectId(): ?int
+	{
+		return $this->objectId;
+	}
+
+	public function setObjectId(?int $objectId): static
+	{
+		$this->objectId = $objectId;
+		return $this;
+	}
+
+	public function getIpAddress(): string
+	{
+		return $this->ipAddress;
+	}
+
+	public function setIpAddress(string $ipAddress): static
+	{
+		$this->ipAddress = $ipAddress;
+		return $this;
+	}
+
+	public function getObjectClass(): ?string
+	{
+		return $this->objectClass;
+	}
+
+	public function setObjectClass(?string $objectClass): static
+	{
+		$this->objectClass = $objectClass;
+		return $this;
+	}
+
+	public function getIdentifier(): ?string
+	{
+		return $this->identifier;
+	}
+
+	public function setIdentifier(?string $identifier): static
+	{
+		$this->identifier = $identifier;
+		return $this;
+	}
 }

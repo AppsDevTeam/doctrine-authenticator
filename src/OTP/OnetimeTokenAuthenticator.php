@@ -3,25 +3,31 @@ declare(strict_types=1);
 
 namespace ADT\DoctrineAuthenticator\OTP;
 
+use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
 use ADT\DoctrineComponents\EntityManager;
 use Brick\PhoneNumber\PhoneNumber;
 use Brick\PhoneNumber\PhoneNumberParseException;
+use Nette\Http\Request;
 use Nette\Security\AuthenticationException;
 use Nette\Security\IIdentity;
 use Nette\Security\Passwords;
+use Nette\Security\UserStorage;
 use Nette\Utils\Validators;
 
-/**
- * @method Identity authenticate(string $user, string $password, ?string $context = null, array $metadata = []))
- */
-trait OnetimeTokenAuthenticatorTrait
+class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 {
-	abstract protected function getOnetimeTokenService(): OnetimeTokenService;
-	abstract protected function getUniversalPasswords(): array;
-	abstract protected function getIdentityQuery(): IdentityQuery;
-	abstract protected function getEntityManager(): EntityManager;
-	
+	public function __construct(
+		?string $expiration,
+		UserStorage $cookieStorage,
+		protected EntityManager $em,
+		Request $httpRequest,
+		protected OnetimeTokenService $onetimeTokenService,
+		protected IdentityQueryFactory $identityQueryFactory,
+	) {
+		parent::__construct($expiration, $cookieStorage, $em, $httpRequest);
+	}
+
 	protected function verifyPassword(string $password, string $hash): bool
 	{
 		return new Passwords()->verify($password, $hash);
@@ -35,12 +41,12 @@ trait OnetimeTokenAuthenticatorTrait
 		$onetimeToken = null;
 		if (!$password) {
 			/** @var OnetimeToken $onetimeToken */
-			if (!$onetimeToken = $this->getOnetimeTokenService()->findToken(OnetimeTokenTypeEnum::LOGIN, $user, markAsUsed: false)) {
+			if (!$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $user, markAsUsed: false)) {
 				throw new AuthenticationException();
 			}
 
 			/** @var Identity $identity */
-			if (!$identity = $this->getEntityManager()->getRepository($onetimeToken->getObjectClass())->find($onetimeToken->getObjectId())) {
+			if (!$identity = $this->em->getRepository($onetimeToken->getObjectClass())->find($onetimeToken->getObjectId())) {
 				throw new AuthenticationException();
 			}
 		} else {
@@ -49,14 +55,12 @@ trait OnetimeTokenAuthenticatorTrait
 				throw new AuthenticationException('fcadmin.appGeneral.exceptions.wrongCredentials');
 			}
 
-			if (!array_any($this->getUniversalPasswords(), fn($universalPassword) => $this->verifyPassword($password, $universalPassword))) {
-				if (
-					!$this->verifyPassword($password, (string) $identity->getPassword())
-					&&
-					!$onetimeToken = $this->getOnetimeTokenService()->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
-				) {
-					throw new AuthenticationException();
-				}
+			if (
+				!$this->verifyPassword($password, (string) $identity->getPassword())
+				&&
+				!$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
+			) {
+				throw new AuthenticationException();
 			}
 		}
 
@@ -73,7 +77,7 @@ trait OnetimeTokenAuthenticatorTrait
 
 	public function findIdentity(string $identifier, ?string $context = null, array $metadata = []): ?IIdentity
 	{
-		$identityQuery = $this->getIdentityQuery()
+		$identityQuery = $this->identityQueryFactory->create()
 			->byContext($context);
 
 		if ($this->validatePhoneNumber($identifier)) {

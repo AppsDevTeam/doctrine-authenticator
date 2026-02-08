@@ -10,7 +10,7 @@ use Exception;
 use Nette\Utils\Random;
 use ReflectionException;
 
-class OnetimeTokenService
+final class OnetimeTokenService
 {
 	private const int MAX_TOKENS_PER_IP = 5;
 	private const string CHECK_TIMEFRAME = '-15 minutes';
@@ -30,8 +30,7 @@ class OnetimeTokenService
 
 		$token = Random::generate($length, '123456789ABCDEFGHJKLMNPQRSTUVWXYZ');
 
-		/** @var OnetimeToken $onetimeToken */
-		$onetimeToken = new ($this->em->findEntityClassByInterface(OnetimeToken::class));
+		$onetimeToken = new OnetimeToken();
 		$onetimeToken
 			->setType($type->value)
 			->setValidUntil($validUntil)
@@ -53,7 +52,7 @@ class OnetimeTokenService
 
 		$qb = $this->em->createQueryBuilder();
 		$qb->select('ot')
-			->from($this->em->findEntityClassByInterface(OnetimeToken::class), 'ot')
+			->from(OnetimeToken::class, 'ot')
 			->where('ot.type = :type')
 			->andWhere('ot.token = :token')
 			->andWhere('ot.validUntil > :now')
@@ -91,7 +90,7 @@ class OnetimeTokenService
 
 		$qb = $this->em->createQueryBuilder();
 		$count = $qb->select('COUNT(ot.id)')
-			->from($this->em->findEntityClassByInterface(OnetimeToken::class), 'ot')
+			->from(OnetimeToken::class, 'ot')
 			->where('ot.ipAddress = :ipAddress')
 			->andWhere('ot.createdAt > :createdAfter')
 			->setParameter('ipAddress', $_SERVER['REMOTE_ADDR'])
