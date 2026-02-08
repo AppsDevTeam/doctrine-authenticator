@@ -7,19 +7,26 @@ use Doctrine\ORM\QueryBuilder;
 
 trait OnetimeTokenQueryTrait
 {
-	public function byToken(string $token): static
+	public function byToken(string $hashedToken, ?string $identifier = null): static
 	{
-		return $this->by('token', $token);
+		$this->filter[] = function (QueryBuilder $qb) use ($hashedToken, $identifier) {
+			$qb->andWhere('e.token = :token')
+				->setParameter('token', $hashedToken);
+
+			if ($identifier) {
+				$qb->andWhere('(e.identifier = :identifier OR e.identifier IS NULL)')
+					->setParameter('identifier', $identifier);
+			} else {
+				$qb->andWhere('e.identifier IS NULL');
+			}
+		};
+		
+		return $this;
 	}
 
 	public function byType(string $type): static
 	{
 		return $this->by('type', $type);
-	}
-
-	public function byIdentifier(?string $identifier): static
-	{
-		return $this->by('identifier', $identifier);
 	}
 
 	public function byIsValid(bool $checkValidUntil = true): static

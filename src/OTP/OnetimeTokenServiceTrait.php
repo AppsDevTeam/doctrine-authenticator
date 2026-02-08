@@ -46,8 +46,7 @@ trait OnetimeTokenServiceTrait
 		if ($onetimeToken = $this->onetimeTokenQueryFactory->create()
 			->byIsValid()
 			->byType($type->value)
-			->byIdentifier($identifier)
-			->byToken(hash('sha256', $token))
+			->byToken(hash('sha256', $token), $identifier)
 			->fetchOneOrNull()
 		) {
 			if ($markAsUsed) {
