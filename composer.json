@@ -17,7 +17,7 @@
 		"nette/http": "^3.0",
 		"doctrine/orm": "^2.9|^3.0",
 		"adt/doctrine-components": "^3.3",
-		"brick/phonenumber": "^0.8"
+		"brick/phonenumber": "^0.7"
 	},
 	"autoload": {
 		"psr-4": {
