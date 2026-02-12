@@ -161,7 +161,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->storageEntity = $storageEntity;
 
-		$identity = $this->em->getRepository($storageEntity->getObjectClass())->find($storageEntity->getObjectId());
+		if (!$identity = $this->em->getRepository($storageEntity->getObjectClass())->find($storageEntity->getObjectId())) {
+			return null;
+		}
 		$identity->setAuthToken($storageEntity->getToken());
 		$this->initIdentity($identity, $storageEntity->getMetadata());
 		return $identity;
