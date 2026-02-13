@@ -42,17 +42,17 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 		if (!$password) {
 			/** @var OnetimeToken $onetimeToken */
 			if (!$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $user, markAsUsed: false)) {
-				throw new AuthenticationException();
+				throw new AuthenticationException('Token ' . $user . ' not found.');
 			}
 
 			/** @var Identity $identity */
 			if (!$identity = $this->em->getRepository($onetimeToken->getObjectClass())->find($onetimeToken->getObjectId())) {
-				throw new AuthenticationException();
+				throw new AuthenticationException("Identity not found for token " . $onetimeToken->getId());
 			}
 		} else {
 			/** @var Identity $identity */
 			if (!$identity = $this->findIdentity($user, $context, $metadata)) {
-				throw new AuthenticationException('fcadmin.appGeneral.exceptions.wrongCredentials');
+				throw new AuthenticationException('Identity ' . $user . ' not found.');
 			}
 
 			if (
@@ -60,7 +60,7 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 				&&
 				!$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
 			) {
-				throw new AuthenticationException();
+				throw new AuthenticationException('Wrong password for identifier ' . $user);
 			}
 		}
 
