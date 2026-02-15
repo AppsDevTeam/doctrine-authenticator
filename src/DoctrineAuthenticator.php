@@ -107,13 +107,15 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 */
 	public function wakeupIdentity(IIdentity $identity): ?IIdentity
 	{
+		$token = $identity->getId();
+
 		/** @var StorageEntity $storageEntity */
-		if (!$storageEntity = $this->findSession($identity->getId())) {
+		if (!$storageEntity = $this->findSession($token)) {
 			if (!headers_sent()) {
 				$this->cookieStorage->clearAuthentication(true);
 			}
 			if ($this->onInvalidToken) {
-				($this->onInvalidToken)($identity->getId());
+				($this->onInvalidToken)($token);
 			}
 			return null;
 		}
@@ -161,10 +163,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 		$this->storageEntity = $storageEntity;
 
+		/** @var DoctrineAuthenticatorIdentity $identity */
 		if (!$identity = $this->em->getRepository($storageEntity->getObjectClass())->find($storageEntity->getObjectId())) {
 			return null;
 		}
-		$identity->setAuthToken($storageEntity->getToken());
+		$identity->setAuthToken($token);
 		$this->initIdentity($identity, $storageEntity->getMetadata());
 		return $identity;
 	}
@@ -207,7 +210,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return $this->internalEm->getRepository(StorageEntity::class)
 			->createQueryBuilder('e')
 			->where('e.token = :token')
-			->setParameter('token', $token)
+			->setParameter('token', hash('sha256', $token))
 			->getQuery()
 			->getOneOrNullResult();
 	}

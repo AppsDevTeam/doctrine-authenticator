@@ -15,7 +15,7 @@ use Nette\Security\Resource;
 
 #[Entity]
 #[Table(name: "session")]
-#[Index(name: "token_idx", fields: ["token"])]
+#[Index(fields: ["token"])]
 class StorageEntity
 {
 	#[Id]
@@ -26,13 +26,13 @@ class StorageEntity
 	#[Column]
 	protected DateTimeImmutable $createdAt;
 
-	#[Column(length: 32)]
+	#[Column]
 	protected string $objectId;
 	
 	#[Column]
 	protected string $objectClass;
 
-	#[Column(length: 32, unique: true)]
+	#[Column(unique: true)]
 	protected string $token;
 
 	#[Column(nullable: true)]
@@ -59,23 +59,12 @@ class StorageEntity
 	{
 		$this->createdAt = new DateTimeImmutable();
 		$this->objectId = $objectId;
-		$this->token = $token;
+		$this->token = hash('sha256', $token);
 	}
 
 	public function getObjectId(): string
 	{
 		return $this->objectId;
-	}
-
-	public function getToken(): string
-	{
-		return $this->token;
-	}
-
-	public function setToken(string $token): self
-	{
-		$this->token = $token;
-		return $this;
 	}
 
 	public function getValidUntil(): ?DateTimeImmutable
