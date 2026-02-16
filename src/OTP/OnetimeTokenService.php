@@ -24,9 +24,11 @@ final class OnetimeTokenService
 	 * @throws Exception
 	 * @throws TooManyTokenAttemptsException
 	 */
-	public function saveToken(OnetimeTokenType $type, DateTimeImmutable $validUntil, ?Entity $entity = null, ?string $identifier = null, int $length = 32): string
+	public function saveToken(OnetimeTokenType $type, DateTimeImmutable $validUntil, ?Entity $entity = null, ?string $identifier = null, int $length = 32, bool $checkLimit = true): string
 	{
-		$this->checkTokenLimit();
+		if ($checkLimit) {
+			$this->checkTokenLimit();
+		}
 
 		$token = Random::generate($length, '123456789ABCDEFGHJKLMNPQRSTUVWXYZ');
 
@@ -93,6 +95,7 @@ final class OnetimeTokenService
 			->from(OnetimeToken::class, 'ot')
 			->where('ot.ipAddress = :ipAddress')
 			->andWhere('ot.createdAt > :createdAfter')
+			->andWhere('ot.usedAt IS NULL')
 			->setParameter('ipAddress', $_SERVER['REMOTE_ADDR'])
 			->setParameter('createdAfter', new DateTimeImmutable(self::CHECK_TIMEFRAME))
 			->getQuery()
