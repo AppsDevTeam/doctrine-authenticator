@@ -5,9 +5,9 @@ namespace ADT\DoctrineAuthenticator\OTP;
 
 use ADT\DoctrineAuthenticator\DoctrineAuthenticator;
 use ADT\DoctrineAuthenticator\DoctrineAuthenticatorIdentity;
-use ADT\DoctrineComponents\EntityManager;
 use Brick\PhoneNumber\PhoneNumber;
 use Brick\PhoneNumber\PhoneNumberParseException;
+use Doctrine\ORM\EntityManagerInterface;
 use Nette\Http\Request;
 use Nette\Security\AuthenticationException;
 use Nette\Security\IIdentity;
@@ -20,7 +20,7 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 	public function __construct(
 		?string $expiration,
 		UserStorage $cookieStorage,
-		protected EntityManager $em,
+		protected EntityManagerInterface $em,
 		Request $httpRequest,
 		protected OnetimeTokenService $onetimeTokenService,
 		protected IdentityQueryFactory $identityQueryFactory,

@@ -4,24 +4,20 @@ declare(strict_types=1);
 namespace ADT\DoctrineAuthenticator\OTP;
 
 use ADT\DoctrineComponents\Entities\Entity;
-use ADT\DoctrineComponents\EntityManager;
 use DateTimeImmutable;
-use Exception;
+use Doctrine\ORM\EntityManagerInterface;
 use Nette\Utils\Random;
-use ReflectionException;
 
 final class OnetimeTokenService
 {
 	private const int MAX_TOKENS_PER_IP = 5;
 	private const string CHECK_TIMEFRAME = '-15 minutes';
 
-	public function __construct(protected EntityManager $em)
+	public function __construct(protected EntityManagerInterface $em)
 	{
 	}
 
 	/**
-	 * @throws ReflectionException
-	 * @throws Exception
 	 * @throws TooManyTokenAttemptsException
 	 */
 	public function saveToken(OnetimeTokenType $type, DateTimeImmutable $validUntil, ?Entity $entity = null, ?string $identifier = null, int $length = 32, bool $checkLimit = true): string
