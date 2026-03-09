@@ -36,7 +36,7 @@ final class OnetimeTokenService
 			->setObjectId($entity?->getId())
 			->setIdentifier($identifier)
 			->setToken(hash('sha256', $token))
-			->setIpAddress($_SERVER['REMOTE_ADDR']);
+			->setIpAddress($_SERVER['REMOTE_ADDR'] ?? null);
 		$this->em->persist($onetimeToken);
 		$this->em->flush();
 

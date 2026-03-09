@@ -42,8 +42,8 @@ final class OnetimeToken implements Entity
 	#[Column(nullable: false)]
 	protected DateTimeImmutable $validUntil;
 
-	#[Column(nullable: false)]
-	protected string $ipAddress;
+	#[Column(nullable: true)]
+	protected ?string $ipAddress = null;
 
 	#[Column(nullable: true)]
 	protected ?string $identifier = null;
@@ -121,12 +121,12 @@ final class OnetimeToken implements Entity
 		return $this;
 	}
 
-	public function getIpAddress(): string
+	public function getIpAddress(): ?string
 	{
 		return $this->ipAddress;
 	}
 
-	public function setIpAddress(string $ipAddress): static
+	public function setIpAddress(?string $ipAddress): static
 	{
 		$this->ipAddress = $ipAddress;
 		return $this;
