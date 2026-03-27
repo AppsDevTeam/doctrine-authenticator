@@ -13,6 +13,7 @@ use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\OptimisticLockException;
 use Exception;
 use Nette\Http\Request;
+use Nette\Security\AuthenticationException;
 use Nette\Security\Authenticator;
 use Nette\Security\IdentityHandler;
 use Nette\Security\IIdentity;
@@ -35,6 +36,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private StorageEntity $storageEntity;
 	
 	private bool $fraudDetection = true;
+
+	private int $maxLoginAttempts = 0;
+	private string $loginAttemptTimeout = '-15 minutes';
 
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
@@ -63,6 +67,12 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function setFraudDetection(bool $fraudDetection): void
 	{
 		$this->fraudDetection = $fraudDetection;
+	}
+
+	public function setLoginAttemptProtection(int $maxAttempts, string $timeout = '-15 minutes'): void
+	{
+		$this->maxLoginAttempts = $maxAttempts;
+		$this->loginAttemptTimeout = $timeout;
 	}
 
 	/**
@@ -217,9 +227,62 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	final public function authenticate(string $username, ?string $password = null, ?string $context = null, array $metadata = []): IIdentity
 	{
-		$user = $this->verifyCredentials($username, $password, $context, $metadata);
+		$this->checkLoginAttempts();
+
+		try {
+			$user = $this->verifyCredentials($username, $password, $context, $metadata);
+		} catch (AuthenticationException $e) {
+			$this->recordFailedLoginAttempt();
+			throw $e;
+		}
+
 		$user->setAuthMetadata($metadata);
 		return $user;
+	}
+
+	/**
+	 * @throws TooManyLoginAttemptsException
+	 */
+	private function checkLoginAttempts(): void
+	{
+		if ($this->maxLoginAttempts <= 0) {
+			return;
+		}
+
+		$ipAddress = $this->httpRequest->getRemoteAddress();
+		if (!$ipAddress) {
+			return;
+		}
+
+		$count = $this->internalEm->createQueryBuilder()
+			->select('COUNT(la.id)')
+			->from(LoginAttempt::class, 'la')
+			->where('la.ipAddress = :ipAddress')
+			->andWhere('la.createdAt > :createdAfter')
+			->setParameter('ipAddress', $ipAddress)
+			->setParameter('createdAfter', new DateTimeImmutable($this->loginAttemptTimeout))
+			->getQuery()
+			->getSingleScalarResult();
+
+		if ($count >= $this->maxLoginAttempts) {
+			throw new TooManyLoginAttemptsException();
+		}
+	}
+
+	private function recordFailedLoginAttempt(): void
+	{
+		if ($this->maxLoginAttempts <= 0) {
+			return;
+		}
+
+		$ipAddress = $this->httpRequest->getRemoteAddress();
+		if (!$ipAddress) {
+			return;
+		}
+
+		$loginAttempt = new LoginAttempt($ipAddress);
+		$this->internalEm->persist($loginAttempt);
+		$this->internalEm->flush();
 	}
 
 	private function createEntityManager(): EntityManager
