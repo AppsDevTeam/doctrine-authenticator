@@ -187,9 +187,9 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 * @throws ORMException
 	 * @throws JsonException
 	 */
-	public function clearIdentity(int|SecurityUser $objectId, array $metadata = []): void
+	public function clearIdentity(int|string|null $objectId = null, array $metadata = []): void
 	{
-		if (is_int($objectId)) {
+		if ($objectId) {
 			$qb = $this->internalEm->getRepository(StorageEntity::class)
 				->createQueryBuilder('e')
 				->where('e.validUntil > :now')

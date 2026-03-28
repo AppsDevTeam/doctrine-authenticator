@@ -22,6 +22,6 @@ class SecurityUser extends User
 	{
 		parent::__construct($storage, $authenticator, $authorizator);
 
-		$this->onLoggedOut[] = [$authenticator, 'clearIdentity'];
+		$this->onLoggedOut[] = fn() => $authenticator->clearIdentity();
 	}
 }
