@@ -42,6 +42,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	protected ?Closure $onInvalidToken = null;
 	protected ?Closure $onFraudDetection = null;
+	private ?Closure $expirationCallback = null;
 
 	abstract protected function verifyCredentials(string $user, ?string $password = null, ?string $context = null, array $metadata = []): DoctrineAuthenticatorIdentity;
 
@@ -69,6 +70,26 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$this->fraudDetection = $fraudDetection;
 	}
 
+	public function setExpirationCallback(Closure $callback): void
+	{
+		$this->expirationCallback = $callback;
+	}
+
+	private function getExpiration(?DoctrineAuthenticatorIdentity $identity = null): string
+	{
+		if ($this->expirationCallback && $identity) {
+			try {
+				$result = ($this->expirationCallback)($identity);
+				if ($result !== null) {
+					return $result;
+				}
+			} catch (\Throwable) {
+				// Fall back to default expiration
+			}
+		}
+		return $this->expiration;
+	}
+
 	public function setLoginAttemptProtection(int $maxAttempts, string $timeout = '-15 minutes'): void
 	{
 		$this->maxLoginAttempts = $maxAttempts;
@@ -86,7 +107,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 			$storageEntity = new StorageEntity($identity->getAuthObjectId(), $token);
 			$storageEntity
-				->setValidUntil(new DateTimeImmutable('+' . $this->expiration))
+				->setValidUntil(new DateTimeImmutable('+' . $this->getExpiration($identity)))
 				->setIp($this->httpRequest->getRemoteAddress())
 				->setUserAgent($this->httpRequest->getHeader('User-Agent'))
 				->setContext($identity->getContext())
@@ -160,10 +181,19 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			return null;
 		}
 
+		$this->storageEntity = $storageEntity;
+
+		/** @var DoctrineAuthenticatorIdentity $identity */
+		if (!$realIdentity = $this->em->getRepository($storageEntity->getObjectClass())->find($storageEntity->getObjectId())) {
+			return null;
+		}
+		$realIdentity->setAuthToken($token);
+		$this->initIdentity($realIdentity, $storageEntity->getMetadata());
+
 		// Extend db token expiration and update IP and User Agent header
 		$storageEntity->setIp($this->httpRequest->getRemoteAddress());
 		$storageEntity->setUserAgent($this->httpRequest->getHeader('User-Agent'));
-		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->expiration));
+		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->getExpiration($realIdentity)));
 		$this->internalEm->flush();
 
 		// Extend cookie expiration
@@ -171,15 +201,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$this->cookieStorage->saveAuthentication($identity);
 		}
 
-		$this->storageEntity = $storageEntity;
-
-		/** @var DoctrineAuthenticatorIdentity $identity */
-		if (!$identity = $this->em->getRepository($storageEntity->getObjectClass())->find($storageEntity->getObjectId())) {
-			return null;
-		}
-		$identity->setAuthToken($token);
-		$this->initIdentity($identity, $storageEntity->getMetadata());
-		return $identity;
+		return $realIdentity;
 	}
 
 	/**
@@ -214,7 +236,37 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	{
 		return $this->storageEntity;
 	}
-	
+
+	/**
+	 * @return StorageEntity[]
+	 */
+	public function getActiveSessions(string $objectId): array
+	{
+		return $this->internalEm->getRepository(StorageEntity::class)
+			->createQueryBuilder('e')
+			->where('e.objectId = :objectId')
+			->andWhere('e.validUntil > :now')
+			->setParameter('objectId', $objectId)
+			->setParameter('now', new DateTimeImmutable())
+			->orderBy('e.createdAt', 'DESC')
+			->getQuery()
+			->getResult();
+	}
+
+	public function clearSession(int $sessionId): void
+	{
+		$session = $this->internalEm->getRepository(StorageEntity::class)->find($sessionId);
+		if ($session) {
+			$session->setValidUntil(new DateTimeImmutable());
+			$this->internalEm->flush();
+		}
+	}
+
+	public function getCurrentSessionId(): ?int
+	{
+		return isset($this->storageEntity) ? $this->storageEntity->getId() : null;
+	}
+
 	protected function findSession(string $token): ?StorageEntity
 	{
 		return $this->internalEm->getRepository(StorageEntity::class)

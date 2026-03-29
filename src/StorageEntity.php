@@ -62,6 +62,16 @@ class StorageEntity
 		$this->token = hash('sha256', $token);
 	}
 
+	public function getId(): ?int
+	{
+		return $this->id;
+	}
+
+	public function getCreatedAt(): DateTimeImmutable
+	{
+		return $this->createdAt;
+	}
+
 	public function getObjectId(): string
 	{
 		return $this->objectId;
