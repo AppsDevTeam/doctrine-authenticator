@@ -15,9 +15,11 @@
 		"php": ">=8.4",
 		"nette/security": "^3.2",
 		"nette/http": "^3.0",
+		"nette/di": "^3.1",
 		"doctrine/orm": "^2.9|^3.0",
 		"adt/doctrine-components": "^3.3",
-		"brick/phonenumber": "^0.7"
+		"brick/phonenumber": "^0.7",
+		"symfony/console": "^6.0|^7.0"
 	},
 	"autoload": {
 		"psr-4": {
