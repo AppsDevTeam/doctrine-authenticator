@@ -218,3 +218,25 @@ Just call `login` on security user as you are used to:
 ```php
 $this->securityUser->login($email, $password);
 ```
+
+## Clearing expired sessions
+
+Register the extension, which registers the console command:
+
+```neon
+extensions:
+	doctrineAuthenticator: ADT\DoctrineAuthenticator\DI\DoctrineAuthenticatorExtension
+```
+
+It deletes sessions whose `validUntil` is older than the given number of days
+(defaults to 365 days, i.e. one year):
+
+```bash
+# delete sessions expired more than a year ago (default)
+php bin/console doctrine-authenticator:clear-expired-sessions
+
+# delete sessions expired more than 30 days ago
+php bin/console doctrine-authenticator:clear-expired-sessions 30
+```
+
+Run it periodically (e.g. via cron) to keep the `session` table clean.
