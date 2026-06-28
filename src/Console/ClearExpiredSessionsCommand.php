@@ -16,6 +16,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'doctrine-authenticator:clear-expired-sessions', description: 'Delete expired sessions.')]
 class ClearExpiredSessionsCommand extends Command
 {
+	private const int BATCH_SIZE = 10000;
+
 	public function __construct(private readonly EntityManagerInterface $em)
 	{
 		parent::__construct();
@@ -33,12 +35,29 @@ class ClearExpiredSessionsCommand extends Command
 
 	protected function execute(InputInterface $input, OutputInterface $output): int
 	{
-		$count = $this->em->createQueryBuilder()
-			->delete(StorageEntity::class, 'e')
-			->where('e.validUntil < :validUntil')
-			->setParameter('validUntil', new DateTimeImmutable('-' . (int) $input->getArgument('days') . ' days'))
-			->getQuery()
-			->execute();
+		$validUntil = new DateTimeImmutable('-' . (int) $input->getArgument('days') . ' days');
+
+		do {
+			$ids = $this->em->createQueryBuilder()
+				->select('e.id')
+				->from(StorageEntity::class, 'e')
+				->where('e.validUntil < :validUntil')
+				->setParameter('validUntil', $validUntil)
+				->setMaxResults(self::BATCH_SIZE)
+				->getQuery()
+				->getSingleColumnResult();
+
+			if (!$ids) {
+				break;
+			}
+
+			$this->em->createQueryBuilder()
+				->delete(StorageEntity::class, 'e')
+				->where('e.id IN (:ids)')
+				->setParameter('ids', $ids)
+				->getQuery()
+				->execute();
+		} while (count($ids) === self::BATCH_SIZE);
 
 		return self::SUCCESS;
 	}
