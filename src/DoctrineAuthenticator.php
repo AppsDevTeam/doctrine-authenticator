@@ -279,12 +279,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	final public function authenticate(string $username, ?string $password = null, ?string $context = null, array $metadata = []): IIdentity
 	{
-		$this->checkLoginAttempts();
-
 		try {
+			$this->checkLoginAttempts();
 			$user = $this->verifyCredentials($username, $password, $context, $metadata);
 		} catch (AuthenticationException $e) {
-			$this->recordFailedLoginAttempt();
+			$this->recordFailedLoginAttempt($username, $e);
 			throw $e;
 		}
 
@@ -306,13 +305,18 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			return;
 		}
 
+		// Attempts already rejected by the throttling are logged for auditing, but must not
+		// be counted here - otherwise every blocked attempt would move the sliding window
+		// and keep the address locked out for as long as the requests keep coming.
 		$count = $this->internalEm->createQueryBuilder()
 			->select('COUNT(la.id)')
 			->from(LoginAttempt::class, 'la')
 			->where('la.ipAddress = :ipAddress')
 			->andWhere('la.createdAt > :createdAfter')
+			->andWhere('(la.exception IS NULL OR la.exception != :throttledException)')
 			->setParameter('ipAddress', $ipAddress)
 			->setParameter('createdAfter', new DateTimeImmutable($this->loginAttemptTimeout))
+			->setParameter('throttledException', TooManyLoginAttemptsException::class)
 			->getQuery()
 			->getSingleScalarResult();
 
@@ -321,7 +325,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 	}
 
-	private function recordFailedLoginAttempt(): void
+	private function recordFailedLoginAttempt(string $username, AuthenticationException $exception): void
 	{
 		if ($this->maxLoginAttempts <= 0) {
 			return;
@@ -332,7 +336,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			return;
 		}
 
-		$loginAttempt = new LoginAttempt($ipAddress);
+		$loginAttempt = new LoginAttempt($ipAddress, $username, $exception);
 		$this->internalEm->persist($loginAttempt);
 		$this->internalEm->flush();
 	}
