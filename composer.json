@@ -1,7 +1,11 @@
 {
 	"name": "adt/doctrine-authenticator",
 	"type": "library",
-	"keywords": ["nette", "doctrine", "authenticator"],
+	"keywords": [
+		"nette",
+		"doctrine",
+		"authenticator"
+	],
 	"authors": [
 		{
 			"name": "Apps Dev Team",
@@ -25,5 +29,8 @@
 		"psr-4": {
 			"ADT\\DoctrineAuthenticator\\": "src"
 		}
+	},
+	"suggest": {
+		"geoip2/geoip2": "Country-based fraud detection (setCountryFraudDetection)"
 	}
 }

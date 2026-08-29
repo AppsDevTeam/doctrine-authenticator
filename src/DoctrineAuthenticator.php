@@ -40,6 +40,10 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	private bool $authLog = false;
 
+	/** Cesta k MaxMind GeoLite2/GeoIP2 Country .mmdb (country fraud detection) */
+	private ?string $geoIpDbPath = null;
+	private ?object $geoIpReader = null;
+
 	/** Login name from the current authenticate() call, for the subsequent sleepIdentity() */
 	private ?string $authLogIdentity = null;
 
@@ -74,6 +78,24 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function setFraudDetection(bool $fraudDetection): void
 	{
 		$this->fraudDetection = $fraudDetection;
+	}
+
+	/**
+	 * Country-based fraud detection: a session whose IP moves to a different
+	 * country is killed even when the User-Agent matches (an attacker who
+	 * stole the token can trivially copy the UA, a foreign IP is harder).
+	 * IP changes within one country stay allowed. Requires the geoip2/geoip2
+	 * package and a MaxMind Country .mmdb file (see readme - geoipupdate).
+	 * Fails open: an unresolvable IP or unreadable database never kills
+	 * a session, it only disables this check.
+	 */
+	public function setCountryFraudDetection(?string $geoIpDbPath): void
+	{
+		if ($geoIpDbPath !== null && !class_exists(\GeoIp2\Database\Reader::class)) {
+			throw new Exception('setCountryFraudDetection() requires the geoip2/geoip2 package: composer require geoip2/geoip2');
+		}
+		$this->geoIpDbPath = $geoIpDbPath;
+		$this->geoIpReader = null;
 	}
 
 	/**
@@ -194,13 +216,18 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 
 		// Token was probably stolen
-		if (
-			$this->fraudDetection
-			&&
-			$storageEntity->getIp() !== $this->httpRequest->getRemoteAddress()
-			&&
-			$storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')
-		) {
+		$fraudReason = null;
+		if ($this->fraudDetection && $storageEntity->getIp() !== $this->httpRequest->getRemoteAddress()) {
+			$oldCountry = $this->resolveCountry($storageEntity->getIp());
+			$newCountry = $this->resolveCountry($this->httpRequest->getRemoteAddress());
+			if ($oldCountry !== null && $newCountry !== null && $oldCountry !== $newCountry) {
+				// zmena zeme = fraud i pri shodnem User-Agentu (UA si utocnik zkopiruje snadno)
+				$fraudReason = sprintf('country changed (%s -> %s)', $oldCountry, $newCountry);
+			} elseif ($storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
+				$fraudReason = 'IP and User-Agent mismatch';
+			}
+		}
+		if ($fraudReason) {
 			if (!headers_sent()) {
 				$this->cookieStorage->clearAuthentication(true);
 			}
@@ -216,7 +243,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				objectId: $storageEntity->getObjectId(),
 				storageEntityId: $storageEntity->getId(),
 				context: $storageEntity->getContext(),
-				reason: 'IP and User-Agent mismatch',
+				reason: $fraudReason,
 			);
 			$connection->commit();
 
@@ -416,6 +443,24 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			reason: get_class($exception),
 		);
 		$connection->commit();
+	}
+
+	/**
+	 * ISO kod zeme pro IP, nebo null pri jakemkoliv problemu (fail open -
+	 * vypadek geo databaze nesmi odhlasovat uzivatele).
+	 */
+	private function resolveCountry(?string $ip): ?string
+	{
+		if (!$this->geoIpDbPath || !$ip) {
+			return null;
+		}
+
+		try {
+			$this->geoIpReader ??= new \GeoIp2\Database\Reader($this->geoIpDbPath);
+			return $this->geoIpReader->country($ip)->country->isoCode;
+		} catch (\Throwable) {
+			return null;
+		}
 	}
 
 	/**

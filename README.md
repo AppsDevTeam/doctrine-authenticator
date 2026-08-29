@@ -220,6 +220,32 @@ Just call `login` on security user as you are used to:
 $this->securityUser->login($email, $password);
 ```
 
+## Country-based fraud detection
+
+The default fraud detection kills a session when both the IP and the
+User-Agent change at once. An attacker who stole the session token can
+trivially copy the User-Agent, so you can additionally bind the session to
+a country: any IP change within one country is allowed (mobile networks,
+CGNAT), moving to a different country kills the session even with a matching
+User-Agent.
+
+```neon
+setup:
+    - setCountryFraudDetection('/geoip/GeoLite2-Country.mmdb')
+```
+
+Requires `composer require geoip2/geoip2` and a MaxMind Country database.
+The recommended way to provide and refresh the `.mmdb` file is the official
+[geoipupdate](https://github.com/maxmind/geoipupdate) container writing into
+a volume mounted read-only into the application container (MaxMind licensing
+does not allow bundling the file, and it goes stale - updates are published
+twice a week).
+
+The check fails open: an unresolvable IP or a missing/unreadable database
+never kills a session, it only disables the country rule (the IP+User-Agent
+rule still applies). Detected frauds are recorded in the auth log with reason
+`country changed (CZ -> US)`.
+
 ## Auth log (audit trail)
 
 With `setAuthLog(true)` the authenticator writes an append-only audit record
