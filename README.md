@@ -24,6 +24,7 @@ services:
 		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
 			- setFraudDetection(true) # you can disable it for automatic tests for example
+			- setAuthLog(true) # opt-in append-only audit trail, see "Auth log" below
 ```
 
 Add new mapping via attributes like this (if you are using nettrine):
@@ -218,6 +219,26 @@ Just call `login` on security user as you are used to:
 ```php
 $this->securityUser->login($email, $password);
 ```
+
+## Auth log (audit trail)
+
+With `setAuthLog(true)` the authenticator writes an append-only audit record
+into the `auth_log` table for every authentication event:
+
+| type | when |
+|---|---|
+| `login` | successful login (written in the same transaction as the session row) |
+| `login_failed` | failed login - records the entered identity and the exception class |
+| `login_blocked` | attempt rejected by the login-attempt protection |
+| `logout` | session invalidated via `clearIdentity()` / `clearSession()` |
+| `fraud_detected` | session killed because IP and User-Agent both changed |
+| `invalid_token` | cookie token not found (metadata contains its sha256 for correlation with `session.token`) |
+
+Rows are inserted through the DBAL connection (no ORM events, no unit of work)
+and are never updated. The table is a **staging buffer**: the project must
+periodically move rows into its long-term audit store (read `ORDER BY id`,
+delete after a confirmed copy) - without that the table grows indefinitely.
+Passwords or other credentials are never recorded.
 
 ## Clearing expired sessions
 
