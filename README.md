@@ -24,6 +24,7 @@ services:
 		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
 			- setFraudDetection(true) # you can disable it for automatic tests for example
+			- setAuthLog(true) # opt-in append-only audit trail, see "Auth log" below
 ```
 
 Add new mapping via attributes like this (if you are using nettrine):
@@ -218,6 +219,52 @@ Just call `login` on security user as you are used to:
 ```php
 $this->securityUser->login($email, $password);
 ```
+
+## Country-based fraud detection
+
+The default fraud detection kills a session when both the IP and the
+User-Agent change at once. An attacker who stole the session token can
+trivially copy the User-Agent, so you can additionally bind the session to
+a country: any IP change within one country is allowed (mobile networks,
+CGNAT), moving to a different country kills the session even with a matching
+User-Agent.
+
+```neon
+setup:
+    - setCountryFraudDetection('/geoip/GeoLite2-Country.mmdb')
+```
+
+Requires `composer require geoip2/geoip2` and a MaxMind Country database.
+The recommended way to provide and refresh the `.mmdb` file is the official
+[geoipupdate](https://github.com/maxmind/geoipupdate) container writing into
+a volume mounted read-only into the application container (MaxMind licensing
+does not allow bundling the file, and it goes stale - updates are published
+twice a week).
+
+The check fails open: an unresolvable IP or a missing/unreadable database
+never kills a session, it only disables the country rule (the IP+User-Agent
+rule still applies). Detected frauds are recorded in the auth log with reason
+`country changed (CZ -> US)`.
+
+## Auth log (audit trail)
+
+With `setAuthLog(true)` the authenticator writes an append-only audit record
+into the `auth_log` table for every authentication event:
+
+| type | when |
+|---|---|
+| `login` | successful login (written in the same transaction as the session row) |
+| `login_failed` | failed login - records the entered identity and the exception class |
+| `login_blocked` | attempt rejected by the login-attempt protection |
+| `logout` | session invalidated via `clearIdentity()` / `clearSession()` |
+| `fraud_detected` | session killed because IP and User-Agent both changed |
+| `invalid_token` | cookie token not found (metadata contains its sha256 for correlation with `session.token`) |
+
+Rows are inserted through the DBAL connection (no ORM events, no unit of work)
+and are never updated. The table is a **staging buffer**: the project must
+periodically move rows into its long-term audit store (read `ORDER BY id`,
+delete after a confirmed copy) - without that the table grows indefinitely.
+Passwords or other credentials are never recorded.
 
 ## Clearing expired sessions
 

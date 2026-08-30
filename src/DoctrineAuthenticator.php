@@ -5,6 +5,7 @@ namespace ADT\DoctrineAuthenticator;
 use Closure;
 use DateTime;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -37,6 +38,15 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	
 	private bool $fraudDetection = true;
 
+	private bool $authLog = false;
+
+	/** Cesta k MaxMind GeoLite2/GeoIP2 Country .mmdb (country fraud detection) */
+	private ?string $geoIpDbPath = null;
+	private ?object $geoIpReader = null;
+
+	/** Login name from the current authenticate() call, for the subsequent sleepIdentity() */
+	private ?string $authLogIdentity = null;
+
 	private int $maxLoginAttempts = 0;
 	private string $loginAttemptTimeout = '-15 minutes';
 
@@ -68,6 +78,34 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function setFraudDetection(bool $fraudDetection): void
 	{
 		$this->fraudDetection = $fraudDetection;
+	}
+
+	/**
+	 * Country-based fraud detection: a session whose IP moves to a different
+	 * country is killed even when the User-Agent matches (an attacker who
+	 * stole the token can trivially copy the UA, a foreign IP is harder).
+	 * IP changes within one country stay allowed. Requires the geoip2/geoip2
+	 * package and a MaxMind Country .mmdb file (see readme - geoipupdate).
+	 * Fails open: an unresolvable IP or unreadable database never kills
+	 * a session, it only disables this check.
+	 */
+	public function setCountryFraudDetection(?string $geoIpDbPath): void
+	{
+		if ($geoIpDbPath !== null && !class_exists(\GeoIp2\Database\Reader::class)) {
+			throw new Exception('setCountryFraudDetection() requires the geoip2/geoip2 package: composer require geoip2/geoip2');
+		}
+		$this->geoIpDbPath = $geoIpDbPath;
+		$this->geoIpReader = null;
+	}
+
+	/**
+	 * Enables the append-only auth_log audit trail (see AuthLog). Opt-in:
+	 * a project that enables it must also move rows away, otherwise the
+	 * table grows indefinitely.
+	 */
+	public function setAuthLog(bool $authLog): void
+	{
+		$this->authLog = $authLog;
 	}
 
 	public function setExpirationCallback(Closure $callback): void
@@ -115,10 +153,27 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				->setMetadata($identity->getAuthMetadata());
 
 			$this->internalEm->persist($storageEntity);
+			$connection = $this->internalEm->getConnection();
 			try {
+				// Audit zapisujeme ve stejne transakci jako session - prihlaseni
+				// bez auditniho zaznamu nesmi nastat (a naopak)
+				$connection->beginTransaction();
 				$this->internalEm->flush();
+				$this->writeAuthLog(
+					AuthLog::TYPE_LOGIN,
+					identity: $this->authLogIdentity,
+					objectClass: get_class($identity),
+					objectId: (string) $identity->getAuthObjectId(),
+					storageEntityId: $storageEntity->getId(),
+					context: $identity->getContext(),
+					metadata: $identity->getAuthMetadata() ?: null,
+				);
+				$connection->commit();
 				break;
 			} catch (UniqueConstraintViolationException) {
+				if ($connection->isTransactionActive()) {
+					$connection->rollBack();
+				}
 				$this->internalEm = $this->createEntityManager();
 			}
 		} while (true);
@@ -148,6 +203,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			if ($this->onInvalidToken) {
 				($this->onInvalidToken)($token);
 			}
+			// sha256 tokenu = hodnota sloupce session.token -> dohledatelna korelace
+			$this->writeAuthLog(AuthLog::TYPE_INVALID_TOKEN, metadata: ['token' => hash('sha256', $token)]);
 			return null;
 		}
 
@@ -159,20 +216,36 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 
 		// Token was probably stolen
-		if (
-			$this->fraudDetection
-			&&
-			$storageEntity->getIp() !== $this->httpRequest->getRemoteAddress()
-			&&
-			$storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')
-		) {
+		$fraudReason = null;
+		if ($this->fraudDetection && $storageEntity->getIp() !== $this->httpRequest->getRemoteAddress()) {
+			$oldCountry = $this->resolveCountry($storageEntity->getIp());
+			$newCountry = $this->resolveCountry($this->httpRequest->getRemoteAddress());
+			if ($oldCountry !== null && $newCountry !== null && $oldCountry !== $newCountry) {
+				// zmena zeme = fraud i pri shodnem User-Agentu (UA si utocnik zkopiruje snadno)
+				$fraudReason = sprintf('country changed (%s -> %s)', $oldCountry, $newCountry);
+			} elseif ($storageEntity->getUserAgent() !== $this->httpRequest->getHeader('User-Agent')) {
+				$fraudReason = 'IP and User-Agent mismatch';
+			}
+		}
+		if ($fraudReason) {
 			if (!headers_sent()) {
 				$this->cookieStorage->clearAuthentication(true);
 			}
 
 			$storageEntity->setValidUntil(new DateTimeImmutable());
 			$storageEntity->setFraudData($this->httpRequest->getRemoteAddress(), $this->httpRequest->getHeader('User-Agent'));
+			$connection = $this->internalEm->getConnection();
+			$connection->beginTransaction();
 			$this->internalEm->flush();
+			$this->writeAuthLog(
+				AuthLog::TYPE_FRAUD_DETECTED,
+				objectClass: $storageEntity->getObjectClass(),
+				objectId: $storageEntity->getObjectId(),
+				storageEntityId: $storageEntity->getId(),
+				context: $storageEntity->getContext(),
+				reason: $fraudReason,
+			);
+			$connection->commit();
 
 			if ($this->onFraudDetection) {
 				($this->onFraudDetection)($storageEntity);
@@ -211,6 +284,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 */
 	public function clearIdentity(int|string|null $objectId = null, array $metadata = []): void
 	{
+		$invalidated = [];
 		if ($objectId) {
 			$qb = $this->internalEm->getRepository(StorageEntity::class)
 				->createQueryBuilder('e')
@@ -225,11 +299,25 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			/** @var StorageEntity $_session */
 			foreach ($qb->getQuery()->getResult() as $_session) {
 				$_session->setValidUntil(new DateTimeImmutable());
+				$invalidated[] = $_session;
 			}
 		} else {
 			$this->storageEntity->setValidUntil(new DateTimeImmutable());
+			$invalidated[] = $this->storageEntity;
 		}
+		$connection = $this->internalEm->getConnection();
+		$connection->beginTransaction();
 		$this->internalEm->flush();
+		foreach ($invalidated as $_session) {
+			$this->writeAuthLog(
+				AuthLog::TYPE_LOGOUT,
+				objectClass: $_session->getObjectClass(),
+				objectId: $_session->getObjectId(),
+				storageEntityId: $_session->getId(),
+				context: $_session->getContext(),
+			);
+		}
+		$connection->commit();
 	}
 	
 	public function getStorageEntity(): StorageEntity
@@ -258,7 +346,17 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$session = $this->internalEm->getRepository(StorageEntity::class)->find($sessionId);
 		if ($session) {
 			$session->setValidUntil(new DateTimeImmutable());
+			$connection = $this->internalEm->getConnection();
+			$connection->beginTransaction();
 			$this->internalEm->flush();
+			$this->writeAuthLog(
+				AuthLog::TYPE_LOGOUT,
+				objectClass: $session->getObjectClass(),
+				objectId: $session->getObjectId(),
+				storageEntityId: $session->getId(),
+				context: $session->getContext(),
+			);
+			$connection->commit();
 		}
 	}
 
@@ -279,11 +377,12 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	final public function authenticate(string $username, ?string $password = null, ?string $context = null, array $metadata = []): IIdentity
 	{
+		$this->authLogIdentity = $username;
 		try {
 			$this->checkLoginAttempts();
 			$user = $this->verifyCredentials($username, $password, $context, $metadata);
 		} catch (AuthenticationException $e) {
-			$this->recordFailedLoginAttempt($username, $e);
+			$this->recordFailedLoginAttempt($username, $e, $context);
 			throw $e;
 		}
 
@@ -325,20 +424,92 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 	}
 
-	private function recordFailedLoginAttempt(string $username, AuthenticationException $exception): void
+	private function recordFailedLoginAttempt(string $username, AuthenticationException $exception, ?string $context = null): void
 	{
-		if ($this->maxLoginAttempts <= 0) {
-			return;
-		}
-
 		$ipAddress = $this->httpRequest->getRemoteAddress();
-		if (!$ipAddress) {
+
+		// LoginAttempt zustava vazany na throttling; auditni zaznam vznika vzdy
+		$connection = $this->internalEm->getConnection();
+		$connection->beginTransaction();
+		if ($this->maxLoginAttempts > 0 && $ipAddress) {
+			$loginAttempt = new LoginAttempt($ipAddress, $username, $exception);
+			$this->internalEm->persist($loginAttempt);
+			$this->internalEm->flush();
+		}
+		$this->writeAuthLog(
+			$exception instanceof TooManyLoginAttemptsException ? AuthLog::TYPE_LOGIN_BLOCKED : AuthLog::TYPE_LOGIN_FAILED,
+			identity: $username,
+			context: $context,
+			reason: get_class($exception),
+		);
+		$connection->commit();
+	}
+
+	/**
+	 * ISO kod zeme pro IP, nebo null pri jakemkoliv problemu (fail open -
+	 * vypadek geo databaze nesmi odhlasovat uzivatele).
+	 */
+	private function resolveCountry(?string $ip): ?string
+	{
+		if (!$this->geoIpDbPath || !$ip) {
+			return null;
+		}
+
+		try {
+			$this->geoIpReader ??= new \GeoIp2\Database\Reader($this->geoIpDbPath);
+			return $this->geoIpReader->country($ip)->country->isoCode;
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
+	/**
+	 * Zapis auditni udalosti primym insertem pres DBAL (mimo ORM - zadna
+	 * unit of work, zadne lifecycle eventy). Nazvy tabulky a sloupcu se
+	 * berou z ClassMetadata, takze respektuji naming strategy projektu.
+	 * Bezi na spojeni internalEm - volajici ji muze obalit transakci
+	 * spolecne s flush() souvisejicich entit.
+	 */
+	private function writeAuthLog(
+		string $type,
+		?string $identity = null,
+		?string $objectClass = null,
+		?string $objectId = null,
+		?int $storageEntityId = null,
+		?string $context = null,
+		?string $reason = null,
+		?array $metadata = null,
+	): void
+	{
+		if (!$this->authLog) {
 			return;
 		}
 
-		$loginAttempt = new LoginAttempt($ipAddress, $username, $exception);
-		$this->internalEm->persist($loginAttempt);
-		$this->internalEm->flush();
+		$meta = $this->internalEm->getClassMetadata(AuthLog::class);
+		$userAgent = $this->httpRequest->getHeader('User-Agent');
+
+		$this->internalEm->getConnection()->insert(
+			$meta->getTableName(),
+			[
+				$meta->getColumnName('type') => $type,
+				// utocnik ovlada delku identity i User-Agentu - nikdy nesmi rozbit insert
+				$meta->getColumnName('identity') => $identity !== null ? mb_substr($identity, 0, AuthLog::IDENTITY_MAX_LENGTH) : null,
+				$meta->getColumnName('objectClass') => $objectClass,
+				$meta->getColumnName('objectId') => $objectId,
+				$meta->getColumnName('storageEntityId') => $storageEntityId,
+				$meta->getColumnName('context') => $context,
+				$meta->getColumnName('ip') => $this->httpRequest->getRemoteAddress(),
+				$meta->getColumnName('userAgent') => $userAgent !== null ? mb_substr($userAgent, 0, AuthLog::USER_AGENT_MAX_LENGTH) : null,
+				$meta->getColumnName('reason') => $reason !== null ? mb_substr($reason, 0, AuthLog::REASON_MAX_LENGTH) : null,
+				$meta->getColumnName('metadata') => $metadata,
+				$meta->getColumnName('createdAt') => new DateTimeImmutable(),
+			],
+			[
+				$meta->getColumnName('storageEntityId') => Types::INTEGER,
+				$meta->getColumnName('metadata') => Types::JSON,
+				$meta->getColumnName('createdAt') => Types::DATETIME_IMMUTABLE,
+			]
+		);
 	}
 
 	private function createEntityManager(): EntityManager
