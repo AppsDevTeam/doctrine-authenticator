@@ -22,8 +22,10 @@ use Nette\Security\SimpleIdentity;
 use Nette\Security\UserStorage;
 use Nette\Utils\Json;
 use Nette\Utils\JsonException;
+use Nette\Utils\Arrays;
 use Nette\Utils\Random;
 use DateTimeImmutable;
+use DateTimeZone;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
@@ -39,6 +41,41 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private bool $fraudDetection = true;
 
 	private bool $authLog = false;
+
+	/**
+	 * Nastala autentizacni udalost. Knihovna sama nerozhoduje, co se s ni
+	 * stane - jen ji ohlasi; co s tim (audit, notifikace, metrika) urcuje
+	 * projekt tim, co si sem zaregistruje:
+	 *
+	 *   security.authenticator:
+	 *       setup:
+	 *           - '$onAuthEvent[]' = [@nejakySubscriber, authEvent]
+	 *
+	 * Jeden event pro vsechny typy, ne pole per typ: vsech sest udalosti
+	 * (AuthLog::TYPE_*) nese TENTYZ tvar dat, takze samostatne eventy by mely
+	 * shodnou signaturu. Navic by kolidovaly s existujicimi $onInvalidToken
+	 * a $onFraudDetection, ktere znamenaji neco jineho - jsou to zasahy do
+	 * prubehu, ne oznameni.
+	 *
+	 * Vola se vzdy, kdyz je zaregistrovany aspon jeden posluchac. Nezavisi
+	 * na setAuthLog() - ten rozhoduje jen o vlastni tabulce auth_log.
+	 *
+	 * Callback dostane jen skalary a pole:
+	 *
+	 *   function (
+	 *       string $type,               // AuthLog::TYPE_* konstanta
+	 *       ?string $identity,          // prihlasovaci jmeno, pod kterym se to stalo
+	 *       ?string $objectClass,       // trida identity
+	 *       ?string $objectId,          // id identity
+	 *       ?int $storageEntityId,      // id session - koreluje udalosti jedne session
+	 *       ?string $context,
+	 *       ?string $reason,            // duvod zamitnuti
+	 *       ?array $metadata,
+	 *   ): void
+	 *
+	 * @var array<callable(string, ?string, ?string, ?string, ?int, ?string, ?string, ?array): void>
+	 */
+	public array $onAuthEvent = [];
 
 	/** Cesta k MaxMind GeoLite2/GeoIP2 Country .mmdb (country fraud detection) */
 	private ?string $geoIpDbPath = null;
@@ -99,14 +136,17 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	}
 
 	/**
-	 * Enables the append-only auth_log audit trail (see AuthLog). Opt-in:
-	 * a project that enables it must also move rows away, otherwise the
-	 * table grows indefinitely.
+	 * LEGACY: zapne zapis do vlastni tabulky auth_log.
+	 *
+	 * Projekt, ktery si udalosti odchytava pres $onAuthEvent, tohle nechce -
+	 * jinak se kazda udalost zapise dvakrat. Zustava jen pro projekty, ktere
+	 * jeste prevedene nejsou.
 	 */
 	public function setAuthLog(bool $authLog): void
 	{
 		$this->authLog = $authLog;
 	}
+
 
 	public function setExpirationCallback(Closure $callback): void
 	{
@@ -481,6 +521,32 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		?array $metadata = null,
 	): void
 	{
+		if (!$this->onAuthEvent && !$this->authLog) {
+			return;
+		}
+
+		// utocnik ovlada delku identity, User-Agentu i duvodu - zkracujeme uz
+		// tady, aby to nerozbilo insert ani na strane posluchace
+		$identity = $identity !== null ? mb_substr($identity, 0, AuthLog::IDENTITY_MAX_LENGTH) : null;
+		$reason = $reason !== null ? mb_substr($reason, 0, AuthLog::REASON_MAX_LENGTH) : null;
+		$userAgentHeader = $this->httpRequest->getHeader('User-Agent');
+		$userAgent = $userAgentHeader !== null ? mb_substr($userAgentHeader, 0, AuthLog::USER_AGENT_MAX_LENGTH) : null;
+
+		Arrays::invoke(
+			$this->onAuthEvent,
+			$type,
+			$identity,
+			$objectClass,
+			$objectId,
+			$storageEntityId,
+			$context,
+			$reason,
+			$metadata,
+		);
+
+		// Vlastni tabulka auth_log - LEGACY. Projekt, ktery si udalosti
+		// odchytava pres $onAuthEvent, ji nepotrebuje a setAuthLog() nezapina.
+		// Az na ni prestanou zaviset vsechny projekty, muze tato cast zmizet.
 		if (!$this->authLog) {
 			return;
 		}
@@ -492,15 +558,14 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$meta->getTableName(),
 			[
 				$meta->getColumnName('type') => $type,
-				// utocnik ovlada delku identity i User-Agentu - nikdy nesmi rozbit insert
-				$meta->getColumnName('identity') => $identity !== null ? mb_substr($identity, 0, AuthLog::IDENTITY_MAX_LENGTH) : null,
+				$meta->getColumnName('identity') => $identity,
 				$meta->getColumnName('objectClass') => $objectClass,
 				$meta->getColumnName('objectId') => $objectId,
 				$meta->getColumnName('storageEntityId') => $storageEntityId,
 				$meta->getColumnName('context') => $context,
 				$meta->getColumnName('ip') => $this->httpRequest->getRemoteAddress(),
-				$meta->getColumnName('userAgent') => $userAgent !== null ? mb_substr($userAgent, 0, AuthLog::USER_AGENT_MAX_LENGTH) : null,
-				$meta->getColumnName('reason') => $reason !== null ? mb_substr($reason, 0, AuthLog::REASON_MAX_LENGTH) : null,
+				$meta->getColumnName('userAgent') => $userAgent,
+				$meta->getColumnName('reason') => $reason,
 				$meta->getColumnName('metadata') => $metadata,
 				$meta->getColumnName('createdAt') => new DateTimeImmutable(),
 			],
