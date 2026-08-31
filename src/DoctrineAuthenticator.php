@@ -5,7 +5,6 @@ namespace ADT\DoctrineAuthenticator;
 use Closure;
 use DateTime;
 use Doctrine\DBAL\DriverManager;
-use Doctrine\DBAL\Types\Types;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,10 +24,22 @@ use Nette\Utils\JsonException;
 use Nette\Utils\Arrays;
 use Nette\Utils\Random;
 use DateTimeImmutable;
-use DateTimeZone;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
+	/** typy udalosti pro $onAuthEvent */
+	public const TYPE_LOGIN = 'login';
+	public const TYPE_LOGIN_FAILED = 'login_failed';
+	public const TYPE_LOGIN_BLOCKED = 'login_blocked';
+	public const TYPE_LOGOUT = 'logout';
+	public const TYPE_FRAUD_DETECTED = 'fraud_detected';
+	public const TYPE_INVALID_TOKEN = 'invalid_token';
+
+	/** delky ovlada utocnik - zkracuje se pred vyvolanim udalosti */
+	public const IDENTITY_MAX_LENGTH = 255;
+	public const USER_AGENT_MAX_LENGTH = 500;
+	public const REASON_MAX_LENGTH = 255;
+
 	private string $expiration;
 	private UserStorage $cookieStorage;
 	private Request $httpRequest;
@@ -40,8 +51,6 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	
 	private bool $fraudDetection = true;
 
-	private bool $authLog = false;
-
 	/**
 	 * Nastala autentizacni udalost. Knihovna sama nerozhoduje, co se s ni
 	 * stane - jen ji ohlasi; co s tim (audit, notifikace, metrika) urcuje
@@ -52,18 +61,15 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 *           - '$onAuthEvent[]' = [@nejakySubscriber, authEvent]
 	 *
 	 * Jeden event pro vsechny typy, ne pole per typ: vsech sest udalosti
-	 * (AuthLog::TYPE_*) nese TENTYZ tvar dat, takze samostatne eventy by mely
-	 * shodnou signaturu. Navic by kolidovaly s existujicimi $onInvalidToken
+	 * (TYPE_*) nese TENTYZ tvar dat, takze samostatne eventy by mely shodnou
+	 * signaturu. Navic by kolidovaly s existujicimi $onInvalidToken
 	 * a $onFraudDetection, ktere znamenaji neco jineho - jsou to zasahy do
 	 * prubehu, ne oznameni.
-	 *
-	 * Vola se vzdy, kdyz je zaregistrovany aspon jeden posluchac. Nezavisi
-	 * na setAuthLog() - ten rozhoduje jen o vlastni tabulce auth_log.
 	 *
 	 * Callback dostane jen skalary a pole:
 	 *
 	 *   function (
-	 *       string $type,               // AuthLog::TYPE_* konstanta
+	 *       string $type,               // TYPE_* konstanta
 	 *       ?string $identity,          // prihlasovaci jmeno, pod kterym se to stalo
 	 *       ?string $objectClass,       // trida identity
 	 *       ?string $objectId,          // id identity
@@ -135,18 +141,6 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$this->geoIpReader = null;
 	}
 
-	/**
-	 * LEGACY: zapne zapis do vlastni tabulky auth_log.
-	 *
-	 * Projekt, ktery si udalosti odchytava pres $onAuthEvent, tohle nechce -
-	 * jinak se kazda udalost zapise dvakrat. Zustava jen pro projekty, ktere
-	 * jeste prevedene nejsou.
-	 */
-	public function setAuthLog(bool $authLog): void
-	{
-		$this->authLog = $authLog;
-	}
-
 
 	public function setExpirationCallback(Closure $callback): void
 	{
@@ -195,12 +189,12 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$this->internalEm->persist($storageEntity);
 			$connection = $this->internalEm->getConnection();
 			try {
-				// Audit zapisujeme ve stejne transakci jako session - prihlaseni
-				// bez auditniho zaznamu nesmi nastat (a naopak)
+				// Udalost se vola ve stejne transakci jako vznik session -
+				// posluchac, ktery chce audit atomicky s prihlasenim, ho tak ma
 				$connection->beginTransaction();
 				$this->internalEm->flush();
-				$this->writeAuthLog(
-					AuthLog::TYPE_LOGIN,
+				$this->dispatchAuthEvent(
+					self::TYPE_LOGIN,
 					identity: $this->authLogIdentity,
 					objectClass: get_class($identity),
 					objectId: (string) $identity->getAuthObjectId(),
@@ -244,7 +238,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				($this->onInvalidToken)($token);
 			}
 			// sha256 tokenu = hodnota sloupce session.token -> dohledatelna korelace
-			$this->writeAuthLog(AuthLog::TYPE_INVALID_TOKEN, metadata: ['token' => hash('sha256', $token)]);
+			$this->dispatchAuthEvent(self::TYPE_INVALID_TOKEN, metadata: ['token' => hash('sha256', $token)]);
 			return null;
 		}
 
@@ -277,8 +271,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$connection = $this->internalEm->getConnection();
 			$connection->beginTransaction();
 			$this->internalEm->flush();
-			$this->writeAuthLog(
-				AuthLog::TYPE_FRAUD_DETECTED,
+			$this->dispatchAuthEvent(
+				self::TYPE_FRAUD_DETECTED,
 				objectClass: $storageEntity->getObjectClass(),
 				objectId: $storageEntity->getObjectId(),
 				storageEntityId: $storageEntity->getId(),
@@ -349,8 +343,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$connection->beginTransaction();
 		$this->internalEm->flush();
 		foreach ($invalidated as $_session) {
-			$this->writeAuthLog(
-				AuthLog::TYPE_LOGOUT,
+			$this->dispatchAuthEvent(
+				self::TYPE_LOGOUT,
 				objectClass: $_session->getObjectClass(),
 				objectId: $_session->getObjectId(),
 				storageEntityId: $_session->getId(),
@@ -389,8 +383,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$connection = $this->internalEm->getConnection();
 			$connection->beginTransaction();
 			$this->internalEm->flush();
-			$this->writeAuthLog(
-				AuthLog::TYPE_LOGOUT,
+			$this->dispatchAuthEvent(
+				self::TYPE_LOGOUT,
 				objectClass: $session->getObjectClass(),
 				objectId: $session->getObjectId(),
 				storageEntityId: $session->getId(),
@@ -476,8 +470,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$this->internalEm->persist($loginAttempt);
 			$this->internalEm->flush();
 		}
-		$this->writeAuthLog(
-			$exception instanceof TooManyLoginAttemptsException ? AuthLog::TYPE_LOGIN_BLOCKED : AuthLog::TYPE_LOGIN_FAILED,
+		$this->dispatchAuthEvent(
+			$exception instanceof TooManyLoginAttemptsException ? self::TYPE_LOGIN_BLOCKED : self::TYPE_LOGIN_FAILED,
 			identity: $username,
 			context: $context,
 			reason: get_class($exception),
@@ -510,7 +504,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 * Bezi na spojeni internalEm - volajici ji muze obalit transakci
 	 * spolecne s flush() souvisejicich entit.
 	 */
-	private function writeAuthLog(
+	private function dispatchAuthEvent(
 		string $type,
 		?string $identity = null,
 		?string $objectClass = null,
@@ -521,59 +515,22 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		?array $metadata = null,
 	): void
 	{
-		if (!$this->onAuthEvent && !$this->authLog) {
+		if (!$this->onAuthEvent) {
 			return;
 		}
 
-		// utocnik ovlada delku identity, User-Agentu i duvodu - zkracujeme uz
-		// tady, aby to nerozbilo insert ani na strane posluchace
-		$identity = $identity !== null ? mb_substr($identity, 0, AuthLog::IDENTITY_MAX_LENGTH) : null;
-		$reason = $reason !== null ? mb_substr($reason, 0, AuthLog::REASON_MAX_LENGTH) : null;
-		$userAgentHeader = $this->httpRequest->getHeader('User-Agent');
-		$userAgent = $userAgentHeader !== null ? mb_substr($userAgentHeader, 0, AuthLog::USER_AGENT_MAX_LENGTH) : null;
-
+		// utocnik ovlada delku identity i duvodu - zkracujeme uz tady, aby to
+		// nerozbilo zapis na strane zadneho posluchace
 		Arrays::invoke(
 			$this->onAuthEvent,
 			$type,
-			$identity,
+			$identity !== null ? mb_substr($identity, 0, self::IDENTITY_MAX_LENGTH) : null,
 			$objectClass,
 			$objectId,
 			$storageEntityId,
 			$context,
-			$reason,
+			$reason !== null ? mb_substr($reason, 0, self::REASON_MAX_LENGTH) : null,
 			$metadata,
-		);
-
-		// Vlastni tabulka auth_log - LEGACY. Projekt, ktery si udalosti
-		// odchytava pres $onAuthEvent, ji nepotrebuje a setAuthLog() nezapina.
-		// Az na ni prestanou zaviset vsechny projekty, muze tato cast zmizet.
-		if (!$this->authLog) {
-			return;
-		}
-
-		$meta = $this->internalEm->getClassMetadata(AuthLog::class);
-		$userAgent = $this->httpRequest->getHeader('User-Agent');
-
-		$this->internalEm->getConnection()->insert(
-			$meta->getTableName(),
-			[
-				$meta->getColumnName('type') => $type,
-				$meta->getColumnName('identity') => $identity,
-				$meta->getColumnName('objectClass') => $objectClass,
-				$meta->getColumnName('objectId') => $objectId,
-				$meta->getColumnName('storageEntityId') => $storageEntityId,
-				$meta->getColumnName('context') => $context,
-				$meta->getColumnName('ip') => $this->httpRequest->getRemoteAddress(),
-				$meta->getColumnName('userAgent') => $userAgent,
-				$meta->getColumnName('reason') => $reason,
-				$meta->getColumnName('metadata') => $metadata,
-				$meta->getColumnName('createdAt') => new DateTimeImmutable(),
-			],
-			[
-				$meta->getColumnName('storageEntityId') => Types::INTEGER,
-				$meta->getColumnName('metadata') => Types::JSON,
-				$meta->getColumnName('createdAt') => Types::DATETIME_IMMUTABLE,
-			]
 		);
 	}
 
