@@ -57,8 +57,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 * a $onFraudDetection, ktere znamenaji neco jineho - jsou to zasahy do
 	 * prubehu, ne oznameni.
 	 *
-	 * Vola se JEN kdyz je zapnute setAuthLog() - ten rozhoduje, jestli se
-	 * autentizace audituje vubec.
+	 * Vola se vzdy, kdyz je zaregistrovany aspon jeden posluchac. Nezavisi
+	 * na setAuthLog() - ten rozhoduje jen o vlastni tabulce auth_log.
 	 *
 	 * Callback dostane jen skalary a pole:
 	 *
@@ -136,9 +136,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	}
 
 	/**
-	 * Enables the append-only auth_log audit trail (see AuthLog). Opt-in:
-	 * a project that enables it must also move rows away, otherwise the
-	 * table grows indefinitely.
+	 * LEGACY: zapne zapis do vlastni tabulky auth_log.
+	 *
+	 * Projekt, ktery si udalosti odchytava pres $onAuthEvent, tohle nechce -
+	 * jinak se kazda udalost zapise dvakrat. Zustava jen pro projekty, ktere
+	 * jeste prevedene nejsou.
 	 */
 	public function setAuthLog(bool $authLog): void
 	{
@@ -519,7 +521,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		?array $metadata = null,
 	): void
 	{
-		if (!$this->authLog) {
+		if (!$this->onAuthEvent && !$this->authLog) {
 			return;
 		}
 
@@ -542,9 +544,13 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			$metadata,
 		);
 
-		// Vlastni tabulka auth_log. Projekt, ktery si udalosti odchytava sam
-		// pres $onAuthEvent, ji uz nepotrebuje - az na ni prestanou zaviset
-		// vsechny projekty, muze tato cast zmizet.
+		// Vlastni tabulka auth_log - LEGACY. Projekt, ktery si udalosti
+		// odchytava pres $onAuthEvent, ji nepotrebuje a setAuthLog() nezapina.
+		// Az na ni prestanou zaviset vsechny projekty, muze tato cast zmizet.
+		if (!$this->authLog) {
+			return;
+		}
+
 		$meta = $this->internalEm->getClassMetadata(AuthLog::class);
 		$userAgent = $this->httpRequest->getHeader('User-Agent');
 
