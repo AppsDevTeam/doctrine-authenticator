@@ -41,7 +41,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 
 	private bool $authLog = false;
 
-	private ?AuthAuditLogger $auditLogger = null;
+	private ?Closure $auditLogger = null;
 
 	/** Cesta k MaxMind GeoLite2/GeoIP2 Country .mmdb (country fraud detection) */
 	private ?string $geoIpDbPath = null;
@@ -112,16 +112,35 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	}
 
 	/**
-	 * Nasmeruje auditni udalosti do jednotneho auditniho streamu misto do
-	 * vlastni tabulky auth_log.
+	 * Nasmeruje auditni udalosti jinam nez do vlastni tabulky auth_log -
+	 * typicky do jednotneho auditniho streamu aplikace.
 	 *
-	 * Bez zapisovace se pise do auth_log jako dosud - projekt, ktery jeste
-	 * neni prevedeny, tak nepresta auditovat potichu. Az budou prevedene
-	 * vsechny, muze legacy cesta ve writeAuthLog() zmizet.
+	 * Callback dostane jen SKALARY A POLE, takze implementace nemusi zaviset
+	 * na teto knihovne:
+	 *
+	 *   function (
+	 *       string $action,                 // AuthLog::TYPE_* konstanta
+	 *       DateTimeImmutable $createdAt,   // v UTC
+	 *       ?string $correlationId,         // id session storage
+	 *       array $actor,                   // ['id','label','data','ip','userAgent']
+	 *       array $payload,                 // context, reason, metadata
+	 *       bool $detached,                 // TRUE - viz nize
+	 *   ): void
+	 *
+	 * Zapisuje se vzdy s $detached = TRUE, tedy mimo probihajici transakci:
+	 * zaznam o zamitnutem pokusu musi prezit rollback transakce, ktera ten
+	 * pokus zamitla.
+	 *
+	 * V neonu tedy staci odkaz na metodu sluzby:
+	 *   - setAuditLogger([@nejakyAuditLogger, log])
+	 *
+	 * Bez nastaveneho callbacku se pise do auth_log jako dosud - projekt,
+	 * ktery jeste neni prevedeny, tak nepresta auditovat potichu. Az budou
+	 * prevedene vsechny, muze legacy cesta ve writeAuthLog() zmizet.
 	 */
-	public function setAuditLogger(?AuthAuditLogger $auditLogger): void
+	public function setAuditLogger(?callable $auditLogger): void
 	{
-		$this->auditLogger = $auditLogger;
+		$this->auditLogger = $auditLogger !== null ? Closure::fromCallable($auditLogger) : null;
 	}
 
 	public function setExpirationCallback(Closure $callback): void
@@ -507,18 +526,18 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			// objectClass/objectId je u autentizace sama identita, takze
 			// jde do aktera - ne do zvlastnich sloupcu, kde by aktera
 			// jen duplikovala
-			$this->auditLogger->log(
-				action: $type,
-				createdAt: new DateTimeImmutable('now', new DateTimeZone('UTC')),
-				correlationId: $storageEntityId !== null ? (string) $storageEntityId : null,
-				actor: [
+			($this->auditLogger)(
+				$type,
+				new DateTimeImmutable('now', new DateTimeZone('UTC')),
+				$storageEntityId !== null ? (string) $storageEntityId : null,
+				[
 					'id' => $objectId,
 					'label' => $identity !== null ? mb_substr($identity, 0, AuthLog::IDENTITY_MAX_LENGTH) : null,
 					'data' => $objectClass !== null ? ['class' => $objectClass] : [],
 					'ip' => $this->httpRequest->getRemoteAddress(),
 					'userAgent' => $userAgentHeader !== null ? mb_substr($userAgentHeader, 0, AuthLog::USER_AGENT_MAX_LENGTH) : null,
 				],
-				payload: array_filter(
+				array_filter(
 					[
 						'context' => $context,
 						'reason' => $reason !== null ? mb_substr($reason, 0, AuthLog::REASON_MAX_LENGTH) : null,
@@ -528,7 +547,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 				),
 				// zaznam o zamitnutem pokusu musi prezit rollback transakce,
 				// ktera ten pokus zamitla
-				detached: true,
+				true,
 			);
 
 			return;
