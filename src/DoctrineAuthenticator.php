@@ -24,6 +24,7 @@ use Nette\Utils\Json;
 use Nette\Utils\JsonException;
 use Nette\Utils\Random;
 use DateTimeImmutable;
+use DateTimeZone;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
@@ -39,6 +40,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private bool $fraudDetection = true;
 
 	private bool $authLog = false;
+
+	private ?AuthAuditLogger $auditLogger = null;
 
 	/** Cesta k MaxMind GeoLite2/GeoIP2 Country .mmdb (country fraud detection) */
 	private ?string $geoIpDbPath = null;
@@ -106,6 +109,19 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	public function setAuthLog(bool $authLog): void
 	{
 		$this->authLog = $authLog;
+	}
+
+	/**
+	 * Nasmeruje auditni udalosti do jednotneho auditniho streamu misto do
+	 * vlastni tabulky auth_log.
+	 *
+	 * Bez zapisovace se pise do auth_log jako dosud - projekt, ktery jeste
+	 * neni prevedeny, tak nepresta auditovat potichu. Az budou prevedene
+	 * vsechny, muze legacy cesta ve writeAuthLog() zmizet.
+	 */
+	public function setAuditLogger(?AuthAuditLogger $auditLogger): void
+	{
+		$this->auditLogger = $auditLogger;
 	}
 
 	public function setExpirationCallback(Closure $callback): void
@@ -485,6 +501,41 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			return;
 		}
 
+		$userAgentHeader = $this->httpRequest->getHeader('User-Agent');
+
+		if ($this->auditLogger !== null) {
+			// objectClass/objectId je u autentizace sama identita, takze
+			// jde do aktera - ne do zvlastnich sloupcu, kde by aktera
+			// jen duplikovala
+			$this->auditLogger->log(
+				action: $type,
+				createdAt: new DateTimeImmutable('now', new DateTimeZone('UTC')),
+				correlationId: $storageEntityId !== null ? (string) $storageEntityId : null,
+				actor: [
+					'id' => $objectId,
+					'label' => $identity !== null ? mb_substr($identity, 0, AuthLog::IDENTITY_MAX_LENGTH) : null,
+					'data' => $objectClass !== null ? ['class' => $objectClass] : [],
+					'ip' => $this->httpRequest->getRemoteAddress(),
+					'userAgent' => $userAgentHeader !== null ? mb_substr($userAgentHeader, 0, AuthLog::USER_AGENT_MAX_LENGTH) : null,
+				],
+				payload: array_filter(
+					[
+						'context' => $context,
+						'reason' => $reason !== null ? mb_substr($reason, 0, AuthLog::REASON_MAX_LENGTH) : null,
+						'metadata' => $metadata,
+					],
+					static fn ($value) => $value !== null,
+				),
+				// zaznam o zamitnutem pokusu musi prezit rollback transakce,
+				// ktera ten pokus zamitla
+				detached: true,
+			);
+
+			return;
+		}
+
+		// LEGACY: projekt bez zapisovace pise do vlastni tabulky auth_log jako
+		// dosud. Az budou prevedene vsechny projekty, muze tato cast zmizet.
 		$meta = $this->internalEm->getClassMetadata(AuthLog::class);
 		$userAgent = $this->httpRequest->getHeader('User-Agent');
 
