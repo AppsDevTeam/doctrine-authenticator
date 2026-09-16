@@ -15,6 +15,7 @@ use Throwable;
 
 #[Entity]
 #[Index(fields: ["ipAddress", "createdAt"])]
+#[Index(fields: ["username", "createdAt"])]
 class LoginAttempt
 {
 	private const USERNAME_MAX_LENGTH = 255;

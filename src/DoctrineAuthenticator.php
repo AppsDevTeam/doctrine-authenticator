@@ -91,6 +91,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private ?string $authLogIdentity = null;
 
 	private int $maxLoginAttempts = 0;
+
+	private int $maxLoginAttemptsPerAccount = 0;
 	private string $loginAttemptTimeout = '-15 minutes';
 
 	protected ?Closure $onInvalidToken = null;
@@ -162,10 +164,17 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		return $this->expiration;
 	}
 
-	public function setLoginAttemptProtection(int $maxAttempts, string $timeout = '-15 minutes'): void
+	/**
+	 * @param int $maxAttempts Strop pokusu z jedne zdrojove IP.
+	 * @param string $timeout Klouzave okno, ve kterem se pokusy pocitaji.
+	 * @param int|null $maxAttemptsPerAccount Strop pokusu na jeden cilovy ucet, nezavisle
+	 *     na zdrojove IP. `null` znamena ctyrnasobek IP stropu, `0` kontrolu vypina.
+	 */
+	public function setLoginAttemptProtection(int $maxAttempts, string $timeout = '-15 minutes', ?int $maxAttemptsPerAccount = null): void
 	{
 		$this->maxLoginAttempts = $maxAttempts;
 		$this->loginAttemptTimeout = $timeout;
+		$this->maxLoginAttemptsPerAccount = $maxAttemptsPerAccount ?? $maxAttempts * 4;
 	}
 
 	/**
@@ -413,7 +422,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	{
 		$this->authLogIdentity = $username;
 		try {
-			$this->checkLoginAttempts();
+			$this->checkLoginAttempts($username);
 			$user = $this->verifyCredentials($username, $password, $context, $metadata);
 		} catch (AuthenticationException $e) {
 			$this->recordFailedLoginAttempt($username, $e, $context);
@@ -427,35 +436,41 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	/**
 	 * @throws TooManyLoginAttemptsException
 	 */
-	private function checkLoginAttempts(): void
+	private function checkLoginAttempts(string $username): void
 	{
-		if ($this->maxLoginAttempts <= 0) {
-			return;
+		$createdAfter = new DateTimeImmutable($this->loginAttemptTimeout);
+
+		if ($this->maxLoginAttempts > 0 && ($ipAddress = $this->httpRequest->getRemoteAddress())) {
+			if ($this->countFailedAttempts('ipAddress', $ipAddress, $createdAfter) >= $this->maxLoginAttempts) {
+				throw new TooManyLoginAttemptsException();
+			}
 		}
 
-		$ipAddress = $this->httpRequest->getRemoteAddress();
-		if (!$ipAddress) {
-			return;
+		if ($this->maxLoginAttemptsPerAccount > 0 && $username !== '') {
+			if ($this->countFailedAttempts('username', $username, $createdAfter) >= $this->maxLoginAttemptsPerAccount) {
+				throw new TooManyLoginAttemptsException();
+			}
 		}
+	}
 
-		// Attempts already rejected by the throttling are logged for auditing, but must not
-		// be counted here - otherwise every blocked attempt would move the sliding window
-		// and keep the address locked out for as long as the requests keep coming.
-		$count = $this->internalEm->createQueryBuilder()
+	/**
+	 * Attempts already rejected by the throttling are logged for auditing, but must not
+	 * be counted here - otherwise every blocked attempt would move the sliding window
+	 * and keep the address (or account) locked out for as long as the requests keep coming.
+	 */
+	private function countFailedAttempts(string $field, string $value, DateTimeImmutable $createdAfter): int
+	{
+		return (int) $this->internalEm->createQueryBuilder()
 			->select('COUNT(la.id)')
 			->from(LoginAttempt::class, 'la')
-			->where('la.ipAddress = :ipAddress')
+			->where('la.' . $field . ' = :value')
 			->andWhere('la.createdAt > :createdAfter')
 			->andWhere('(la.exception IS NULL OR la.exception != :throttledException)')
-			->setParameter('ipAddress', $ipAddress)
-			->setParameter('createdAfter', new DateTimeImmutable($this->loginAttemptTimeout))
+			->setParameter('value', $value)
+			->setParameter('createdAfter', $createdAfter)
 			->setParameter('throttledException', TooManyLoginAttemptsException::class)
 			->getQuery()
 			->getSingleScalarResult();
-
-		if ($count >= $this->maxLoginAttempts) {
-			throw new TooManyLoginAttemptsException();
-		}
 	}
 
 	private function recordFailedLoginAttempt(string $username, AuthenticationException $exception, ?string $context = null): void
@@ -465,7 +480,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		// LoginAttempt zustava vazany na throttling; auditni zaznam vznika vzdy
 		$connection = $this->internalEm->getConnection();
 		$connection->beginTransaction();
-		if ($this->maxLoginAttempts > 0 && $ipAddress) {
+		if (($this->maxLoginAttempts > 0 || $this->maxLoginAttemptsPerAccount > 0) && $ipAddress) {
 			$loginAttempt = new LoginAttempt($ipAddress, $username, $exception);
 			$this->internalEm->persist($loginAttempt);
 			$this->internalEm->flush();
