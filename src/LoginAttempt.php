@@ -15,6 +15,8 @@ use Throwable;
 
 #[Entity]
 #[Index(fields: ["ipAddress", "createdAt"])]
+#[Index(fields: ["username", "createdAt"])]
+#[Index(fields: ["username", "ipAddress", "createdAt"])]
 class LoginAttempt
 {
 	private const USERNAME_MAX_LENGTH = 255;
@@ -38,12 +40,21 @@ class LoginAttempt
 	#[Column(type: 'text', nullable: true)]
 	protected ?string $exceptionMessage = null;
 
+	/**
+	 * Successful sign-ins are kept too - they mark the pair (ipAddress, username)
+	 * as known-good, which relaxes the throttling for that pair (see
+	 * DoctrineAuthenticator::isTrustedForAccount).
+	 */
+	#[Column]
+	protected bool $successful = false;
+
 	#[Column]
 	protected DateTimeImmutable $createdAt;
 
-	public function __construct(string $ipAddress, ?string $username = null, ?Throwable $exception = null)
+	public function __construct(string $ipAddress, ?string $username = null, ?Throwable $exception = null, bool $successful = false)
 	{
 		$this->ipAddress = $ipAddress;
+		$this->successful = $successful;
 		$this->createdAt = new DateTimeImmutable();
 
 		// An attacker controls the username, so never let its length break the insert.
@@ -82,6 +93,11 @@ class LoginAttempt
 	public function getExceptionMessage(): ?string
 	{
 		return $this->exceptionMessage;
+	}
+
+	public function getSuccessful(): bool
+	{
+		return $this->successful;
 	}
 
 	public function getCreatedAt(): DateTimeImmutable

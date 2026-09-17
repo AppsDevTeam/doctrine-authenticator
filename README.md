@@ -246,6 +246,65 @@ never kills a session, it only disables the country rule (the IP+User-Agent
 rule still applies). Detected frauds are recorded in the auth log with reason
 `country changed (CZ -> US)`.
 
+## Login attempt throttling
+
+```neon
+setup:
+    - setLoginAttemptProtection(5, '-15 minutes', maxAccountAttempts: 10, maxSprayedAccounts: 20)
+```
+
+Upgrading an existing installation needs a migration - `login_attempt` gained
+a `successful` column (default `0`, every existing row is a failure) and two
+indexes on `username`.
+
+Failed sign-ins are counted in `login_attempt` over a sliding window. Three
+independent counters, because no single key covers both threat models:
+
+| counter | argument | what it stops |
+|---|---|---|
+| (IP, account) | `$maxAttempts` | ordinary guessing from one address |
+| account, all IPs | `$maxAccountAttempts` (default `2 * $maxAttempts`) | distributed guessing - rotating source IPs no longer buys a fresh budget against the same account (CWE-307) |
+| distinct accounts per IP | `$maxSprayedAccounts` (default off) | password spraying, which neither counter above sees |
+
+The first counter is deliberately narrower than a plain per-IP counter:
+behind one NAT - a venue full of terminals, an office - a single mistyped
+password must not lock out everybody sharing that address.
+
+Spray detection would hit those same shared addresses, so its budget is not
+a flat number: it is `$maxSprayedAccounts` **plus the number of accounts that
+address has successfully signed in** within `$trustedIpPeriod`. A venue with
+a hundred terminals therefore carries a budget of a hundred-odd on its own,
+while an address an attacker rented this morning gets the bare
+`$maxSprayedAccounts` - no hand-kept IP whitelist to go stale.
+
+Note it counts accounts *failed* on, so a venue signing in normally never
+moves the counter at all, however many terminals it has.
+
+### Known-good addresses
+
+An account-wide counter makes a targeted lockout DoS possible - anyone who
+knows an email address can burn that account's budget. It is blunted by
+remembering where the account has successfully signed in from: a successful
+sign-in stores a `successful` row for the pair (IP, account), kept for
+`$trustedIpPeriod` (30 days). For such a pair:
+
+- the account-wide counter does not apply at all
+- the (IP, account) budget is multiplied by `$trustedIpMultiplier` (4)
+
+So a legitimate user on a machine they have used before keeps getting in
+while an attacker elsewhere is stopped. Nothing locks an account
+persistently - every counter is a sliding window, and a successful sign-in
+clears that account's failed attempts, so a few typos are never carried over
+into the next sign-in.
+
+The marker row is refreshed in place, so a pair costs one row however often
+it signs in, and markers past `$trustedIpPeriod` are dropped on the way.
+
+Rejected attempts are recorded too (for the audit trail) but never counted -
+otherwise each blocked request would move the window and keep the account
+locked out for as long as the requests keep coming. Blocked attempts surface
+in the auth log as `login_blocked`.
+
 ## Auth log (audit trail)
 
 With `setAuthLog(true)` the authenticator writes an append-only audit record
