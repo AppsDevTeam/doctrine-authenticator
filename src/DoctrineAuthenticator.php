@@ -5,6 +5,7 @@ namespace ADT\DoctrineAuthenticator;
 use Closure;
 use DateTime;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,6 +25,7 @@ use Nette\Utils\JsonException;
 use Nette\Utils\Arrays;
 use Nette\Utils\Random;
 use DateTimeImmutable;
+use DateTimeZone;
 
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
@@ -50,6 +52,8 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	private StorageEntity $storageEntity;
 	
 	private bool $fraudDetection = true;
+
+	private bool $authLog = false;
 
 	/**
 	 * Nastala autentizacni udalost. Knihovna sama nerozhoduje, co se s ni
@@ -148,6 +152,23 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		}
 		$this->geoIpDbPath = $geoIpDbPath;
 		$this->geoIpReader = null;
+	}
+
+
+	/**
+	 * Zapne zapis udalosti do vlastni tabulky auth_log.
+	 *
+	 * Je to PROVOZNI prehled - "kdo se kdy odkud prihlasil" pro podporu, urceny k tomu,
+	 * aby byl videt z administrace. Auditni stopa to neni a nenahrazuje ji: ta ma byt
+	 * mimo aplikaci, aby ji neprepsal nikdo, kdo se do aplikace dostane.
+	 *
+	 * Projekt, ktery si udalosti odchytava pres $onAuthEvent a uklada je jinam, muze mit
+	 * oboji zaroven - jsou to dve kopie s jinou retenci a jinym okruhem ctenaru. Vedomy
+	 * zamer, ne duplicita omylem.
+	 */
+	public function setAuthLog(bool $authLog): void
+	{
+		$this->authLog = $authLog;
 	}
 
 
@@ -706,22 +727,83 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		?array $metadata = null,
 	): void
 	{
-		if (!$this->onAuthEvent) {
+		if (!$this->onAuthEvent && !$this->authLog) {
 			return;
 		}
 
-		// utocnik ovlada delku identity i duvodu - zkracujeme uz tady, aby to
-		// nerozbilo zapis na strane zadneho posluchace
+		// Utocnik ovlada delku identity, duvodu i User-Agentu - zkracuje se uz tady,
+		// aby to nerozbilo zapis ani na strane posluchace. Zkracene hodnoty se pak
+		// pouzivaji dal; drive se User-Agent za timhle radkem znovu precetl z hlavicky
+		// a orez se tim zahodil, takze dost dlouha hlavicka shodila cely insert.
+		$identity = $identity !== null ? mb_substr($identity, 0, self::IDENTITY_MAX_LENGTH) : null;
+		$reason = $reason !== null ? mb_substr($reason, 0, self::REASON_MAX_LENGTH) : null;
+		$userAgentHeader = $this->httpRequest->getHeader('User-Agent');
+		$userAgent = $userAgentHeader !== null ? mb_substr($userAgentHeader, 0, self::USER_AGENT_MAX_LENGTH) : null;
+
 		Arrays::invoke(
 			$this->onAuthEvent,
 			$type,
-			$identity !== null ? mb_substr($identity, 0, self::IDENTITY_MAX_LENGTH) : null,
+			$identity,
 			$objectClass,
 			$objectId,
 			$storageEntityId,
 			$context,
-			$reason !== null ? mb_substr($reason, 0, self::REASON_MAX_LENGTH) : null,
+			$reason,
 			$metadata,
+		);
+
+		if (!$this->authLog) {
+			return;
+		}
+
+		$this->writeAuthLog($type, $identity, $objectClass, $objectId, $storageEntityId, $context, $reason, $metadata, $userAgent);
+	}
+
+	/**
+	 * Zapis do vlastni tabulky auth_log - viz setAuthLog().
+	 *
+	 * Pres DBAL, ne pres ORM: radek logu nema co delat v identity mape a nesmi ho
+	 * ovlivnit flush rozpracovanych entit. Bezi na spojeni internalEm, takze ho volajici
+	 * muze obalit transakci spolecne s flushem souvisejicich entit - prihlaseni bez
+	 * zaznamu (a naopak) tak nenastane.
+	 */
+	private function writeAuthLog(
+		string $type,
+		?string $identity,
+		?string $objectClass,
+		?string $objectId,
+		?int $storageEntityId,
+		?string $context,
+		?string $reason,
+		?array $metadata,
+		?string $userAgent,
+	): void
+	{
+		$meta = $this->internalEm->getClassMetadata(AuthLog::class);
+
+		$this->internalEm->getConnection()->insert(
+			$meta->getTableName(),
+			[
+				$meta->getColumnName('type') => $type,
+				$meta->getColumnName('identity') => $identity,
+				$meta->getColumnName('objectClass') => $objectClass,
+				$meta->getColumnName('objectId') => $objectId,
+				$meta->getColumnName('storageEntityId') => $storageEntityId,
+				$meta->getColumnName('context') => $context,
+				// delku IP ovlada klient (X-Forwarded-For) - nesmi rozbit insert
+				$meta->getColumnName('ip') => mb_substr((string) $this->httpRequest->getRemoteAddress(), 0, 45),
+				$meta->getColumnName('userAgent') => $userAgent,
+				$meta->getColumnName('reason') => $reason,
+				$meta->getColumnName('metadata') => $metadata,
+				// UTC, at jde zaznam korelovat s ostatnimi logy a nebyl pri prechodu
+				// na zimni cas nejednoznacny (2:30 nastane dvakrat)
+				$meta->getColumnName('createdAt') => new DateTimeImmutable('now', new DateTimeZone('UTC')),
+			],
+			[
+				$meta->getColumnName('storageEntityId') => Types::INTEGER,
+				$meta->getColumnName('metadata') => Types::JSON,
+				$meta->getColumnName('createdAt') => Types::DATETIME_IMMUTABLE,
+			]
 		);
 	}
 

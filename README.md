@@ -24,7 +24,7 @@ services:
 		factory: App\Model\Security\Authenticator(expiration: '14 days')
 		setup:
 			- setFraudDetection(true) # you can disable it for automatic tests for example
-			- setAuthLog(true) # opt-in append-only audit trail, see "Auth log" below
+			- setAuthLog(true) # operational auth_log table, see "Auth log" below
 ```
 
 Add new mapping via attributes like this (if you are using nettrine):
@@ -305,10 +305,10 @@ otherwise each blocked request would move the window and keep the account
 locked out for as long as the requests keep coming. Blocked attempts surface
 in the auth log as `login_blocked`.
 
-## Auth log (audit trail)
+## Auth log (operational)
 
-With `setAuthLog(true)` the authenticator writes an append-only audit record
-into the `auth_log` table for every authentication event:
+With `setAuthLog(true)` the authenticator records every authentication event in
+the `auth_log` table:
 
 | type | when |
 |---|---|
@@ -320,10 +320,21 @@ into the `auth_log` table for every authentication event:
 | `invalid_token` | cookie token not found (metadata contains its sha256 for correlation with `session.token`) |
 
 Rows are inserted through the DBAL connection (no ORM events, no unit of work)
-and are never updated. The table is a **staging buffer**: the project must
-periodically move rows into its long-term audit store (read `ORDER BY id`,
-delete after a confirmed copy) - without that the table grows indefinitely.
-Passwords or other credentials are never recorded.
+and are never updated. Passwords or other credentials are never recorded. Times
+are always in UTC, so the records line up with other logs.
+
+**This is an operational log, not an audit trail.** It answers "who signed in,
+when and from where" for support and diagnostics, and it is meant to be readable
+from the project's admin. An audit trail has to live outside the application, so
+that nobody who reaches the application can rewrite the record of what they did
+there - build that separately from `$onAuthEvent`.
+
+Having both is a deliberate choice, not an accident: two copies of the same event
+with different retention and a different set of readers. Just make sure the
+project's logging policy says so - a document claiming audit records are
+unreachable from the application is not true of this table.
+
+The table grows until someone prunes it; retention is up to the project.
 
 ## Clearing expired sessions
 
