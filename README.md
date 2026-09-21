@@ -305,6 +305,35 @@ otherwise each blocked request would move the window and keep the account
 locked out for as long as the requests keep coming. Blocked attempts surface
 in the auth log as `login_blocked`.
 
+### Telling the user
+
+`TooManyLoginAttemptsException` extends `AuthenticationException`, so a form
+that catches the parent shows the same "invalid credentials" it showed on the
+first typo: the user cannot tell that anything changed, let alone when it ends.
+`getLoginThrottleStatus()` exposes what the counters know, so the form can say
+it:
+
+```php
+$status = $authenticator->getLoginThrottleStatus($email);
+
+$status->remainingAttempts;  // ?int - attempts left, null when throttling is off
+$status->blockedUntil;       // ?DateTimeImmutable - when sign-in works again
+$status->isBlocked();
+```
+
+It is the same code that decides whether to refuse a sign-in, not a second
+copy of the counters - a caller computing "one attempt left" on its own would
+drift from what is enforced and promise an attempt that no longer exists.
+
+Remaining attempts are the minimum over the counters, the unblock time their
+maximum: a sign-in is refused while *any* counter is over its limit, so the
+user is let back in only by the one that expires last. The spray counter joins
+in only once it actually blocks - it counts distinct accounts, not attempts
+against this one, so a partial count would be a meaningless remainder.
+
+Call it *after* the failed `authenticate()`, so the attempt that just failed is
+already counted.
+
 ## Auth log (operational)
 
 With `setAuthLog(true)` the authenticator records every authentication event in
@@ -357,3 +386,15 @@ php bin/console doctrine-authenticator:clear-expired-sessions 30
 ```
 
 Run it periodically (e.g. via cron) to keep the `session` table clean.
+
+## Tests
+
+```bash
+composer install
+composer test
+```
+
+Nette Tester over a throwaway SQLite file. A file rather than `:memory:` on
+purpose: the authenticator opens a second connection from the same parameters
+so a recorded attempt survives a rollback of the surrounding transaction, and
+every in-memory connection would be its own empty database.

@@ -12,6 +12,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Exception\ORMException;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\OptimisticLockException;
+use Doctrine\ORM\QueryBuilder;
 use Exception;
 use Nette\Http\Request;
 use Nette\Security\AuthenticationException;
@@ -505,27 +506,84 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 */
 	private function checkLoginAttempts(string $username): void
 	{
-		if ($this->maxLoginAttempts <= 0) {
-			return;
+		if ($this->getLoginThrottleStatus($username)->isBlocked()) {
+			throw new TooManyLoginAttemptsException();
+		}
+	}
+
+	/**
+	 * How much budget is left for this login name and, once it is gone, when it comes back.
+	 *
+	 * This is the same code that decides whether to refuse a sign-in ({@see checkLoginAttempts()}),
+	 * deliberately: a caller that renders "one attempt left" from its own copy of the counters
+	 * would drift from what the authenticator actually enforces, and the message would promise
+	 * an attempt that no longer exists.
+	 *
+	 * Remaining attempts are the minimum over the counters, the unblock time their maximum -
+	 * a sign-in is refused while any counter is over its limit, so the user is let back in only
+	 * by the one that expires last.
+	 */
+	public function getLoginThrottleStatus(string $username): LoginThrottleStatus
+	{
+		$ipAddress = $this->httpRequest->getRemoteAddress();
+
+		if ($this->maxLoginAttempts <= 0 || !$ipAddress) {
+			return new LoginThrottleStatus(null, null);
 		}
 
-		$ipAddress = $this->httpRequest->getRemoteAddress();
-		if (!$ipAddress) {
-			return;
-		}
+		$now = new DateTimeImmutable();
+		// Derived from $now rather than built on its own, so the window has an exact length:
+		// two separate constructor calls differ by microseconds and the unblock time computed
+		// from them would then differ between calls too.
+		$since = $now->modify($this->loginAttemptTimeout);
 
 		$trusted = $this->isTrustedForAccount($ipAddress, $username);
 
-		$pairLimit = $trusted ? $this->maxLoginAttempts * $this->trustedIpMultiplier : $this->maxLoginAttempts;
-		if ($this->countFailedAttempts($username, $ipAddress) >= $pairLimit) {
-			throw new TooManyLoginAttemptsException();
-		}
+		$remaining = null;
+		$blockedUntil = null;
+
+		$evaluate = function (int $used, int $limit, callable $expiresAt) use (&$remaining, &$blockedUntil, $since, $now): void {
+			if ($limit <= 0) {
+				return;
+			}
+
+			$left = max(0, $limit - $used);
+			$remaining = $remaining === null ? $left : min($remaining, $left);
+
+			if ($used < $limit) {
+				return;
+			}
+
+			// The window slides, so the budget reopens once (used - limit + 1) of the oldest
+			// attempts have aged out of it - the one at offset (used - limit) is the last of them.
+			if (!$freedAt = $expiresAt($used - $limit)) {
+				return;
+			}
+
+			// An attempt leaves the window once it is older than the window itself; the extra
+			// second keeps a user who retries exactly on the boundary from being refused again.
+			$until = $freedAt->add($since->diff($now))->modify('+1 second');
+
+			if ($blockedUntil === null || $until > $blockedUntil) {
+				$blockedUntil = $until;
+			}
+		};
+
+		$evaluate(
+			$this->countFailedAttempts($since, $username, $ipAddress),
+			$trusted ? $this->maxLoginAttempts * $this->trustedIpMultiplier : $this->maxLoginAttempts,
+			fn (int $offset) => $this->failedAttemptAt($since, $offset, $username, $ipAddress),
+		);
 
 		// IP-independent, so an attacker rotating source addresses does not get a fresh
 		// budget against the same account. Skipped for a known-good address, otherwise
 		// an attacker could lock the rightful owner out of their own machine.
-		if (!$trusted && $this->maxAccountLoginAttempts > 0 && $this->countFailedAttempts($username) >= $this->maxAccountLoginAttempts) {
-			throw new TooManyLoginAttemptsException();
+		if (!$trusted) {
+			$evaluate(
+				$this->countFailedAttempts($since, $username),
+				$this->maxAccountLoginAttempts,
+				fn (int $offset) => $this->failedAttemptAt($since, $offset, $username),
+			);
 		}
 
 		// The budget scales with how many accounts the address is already known to serve,
@@ -533,57 +591,109 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		// whitelist; an address nobody has ever signed in from starts at the bare minimum.
 		// The known-account count is only reached for once the base budget is gone, so the
 		// common path stays at a single query.
+		//
+		// It only joins in once it actually blocks: its counter is distinct accounts, not
+		// attempts against this one, so a partial count would report a meaningless remainder.
 		if ($this->maxSprayedAccounts > 0) {
-			$sprayed = $this->countSprayedAccounts($ipAddress);
+			$sprayed = $this->countSprayedAccounts($since, $ipAddress);
 
-			if ($sprayed >= $this->maxSprayedAccounts && $sprayed >= $this->maxSprayedAccounts + $this->countKnownAccounts($ipAddress)) {
-				throw new TooManyLoginAttemptsException();
+			if ($sprayed >= $this->maxSprayedAccounts) {
+				$limit = $this->maxSprayedAccounts + $this->countKnownAccounts($now, $ipAddress);
+
+				if ($sprayed >= $limit) {
+					$evaluate($sprayed, $limit, fn (int $offset) => $this->sprayedAccountExpiresAt($since, $ipAddress, $offset));
+				}
 			}
 		}
+
+		return new LoginThrottleStatus($remaining, $blockedUntil);
+	}
+
+	/** Failed attempts in the current window, for one account and optionally one address. */
+	private function countFailedAttempts(DateTimeImmutable $since, string $username, ?string $ipAddress = null): int
+	{
+		return (int) $this->failedAttemptsQb($since, $username, $ipAddress)
+			->select('COUNT(la.id)')
+			->getQuery()
+			->getSingleScalarResult();
+	}
+
+	/** When the $offset-th oldest failed attempt in the window was made. */
+	private function failedAttemptAt(DateTimeImmutable $since, int $offset, string $username, ?string $ipAddress = null): ?DateTimeImmutable
+	{
+		$row = $this->failedAttemptsQb($since, $username, $ipAddress)
+			->select('la.createdAt')
+			->orderBy('la.createdAt', 'ASC')
+			->setFirstResult($offset)
+			->setMaxResults(1)
+			->getQuery()
+			->getOneOrNullResult();
+
+		return $row['createdAt'] ?? null;
 	}
 
 	/**
-	 * Failed attempts in the current window, for one account and optionally one address.
-	 *
 	 * Attempts already rejected by the throttling are logged for auditing, but must not
 	 * be counted here - otherwise every blocked attempt would move the sliding window
 	 * and keep the account locked out for as long as the requests keep coming.
 	 */
-	private function countFailedAttempts(string $username, ?string $ipAddress = null): int
+	private function failedAttemptsQb(DateTimeImmutable $since, string $username, ?string $ipAddress): QueryBuilder
 	{
 		$qb = $this->internalEm->createQueryBuilder()
-			->select('COUNT(la.id)')
 			->from(LoginAttempt::class, 'la')
 			->where('la.username = :username')
 			->andWhere('la.successful = false')
 			->andWhere('la.createdAt > :createdAfter')
 			->andWhere('(la.exception IS NULL OR la.exception != :throttledException)')
 			->setParameter('username', $username)
-			->setParameter('createdAfter', new DateTimeImmutable($this->loginAttemptTimeout))
+			->setParameter('createdAfter', $since)
 			->setParameter('throttledException', TooManyLoginAttemptsException::class);
 
 		if ($ipAddress !== null) {
 			$qb->andWhere('la.ipAddress = :ipAddress')->setParameter('ipAddress', $ipAddress);
 		}
 
-		return (int) $qb->getQuery()->getSingleScalarResult();
+		return $qb;
 	}
 
 	/** How many distinct accounts this address has failed on in the current window. */
-	private function countSprayedAccounts(string $ipAddress): int
+	private function countSprayedAccounts(DateTimeImmutable $since, string $ipAddress): int
 	{
-		return (int) $this->internalEm->createQueryBuilder()
+		return (int) $this->sprayedAccountsQb($since, $ipAddress)
 			->select('COUNT(DISTINCT la.username)')
+			->getQuery()
+			->getSingleScalarResult();
+	}
+
+	/**
+	 * When the $offset-th account in turn drops out of the spray counter. An account stops
+	 * counting only with its last attempt, hence MAX() rather than MIN().
+	 */
+	private function sprayedAccountExpiresAt(DateTimeImmutable $since, string $ipAddress, int $offset): ?DateTimeImmutable
+	{
+		$row = $this->sprayedAccountsQb($since, $ipAddress)
+			->select('MAX(la.createdAt) AS lastAttemptAt')
+			->groupBy('la.username')
+			->orderBy('lastAttemptAt', 'ASC')
+			->setFirstResult($offset)
+			->setMaxResults(1)
+			->getQuery()
+			->getOneOrNullResult();
+
+		return isset($row['lastAttemptAt']) ? new DateTimeImmutable((string) $row['lastAttemptAt']) : null;
+	}
+
+	private function sprayedAccountsQb(DateTimeImmutable $since, string $ipAddress): QueryBuilder
+	{
+		return $this->internalEm->createQueryBuilder()
 			->from(LoginAttempt::class, 'la')
 			->where('la.ipAddress = :ipAddress')
 			->andWhere('la.successful = false')
 			->andWhere('la.createdAt > :createdAfter')
 			->andWhere('(la.exception IS NULL OR la.exception != :throttledException)')
 			->setParameter('ipAddress', $ipAddress)
-			->setParameter('createdAfter', new DateTimeImmutable($this->loginAttemptTimeout))
-			->setParameter('throttledException', TooManyLoginAttemptsException::class)
-			->getQuery()
-			->getSingleScalarResult();
+			->setParameter('createdAfter', $since)
+			->setParameter('throttledException', TooManyLoginAttemptsException::class);
 	}
 
 	/**
@@ -591,7 +701,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 	 * size of the population legitimately sitting behind it. A venue with a hundred
 	 * terminals reports a hundred; an address an attacker just rented reports nothing.
 	 */
-	private function countKnownAccounts(string $ipAddress): int
+	private function countKnownAccounts(DateTimeImmutable $now, string $ipAddress): int
 	{
 		return (int) $this->internalEm->createQueryBuilder()
 			->select('COUNT(DISTINCT la.username)')
@@ -600,7 +710,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			->andWhere('la.successful = true')
 			->andWhere('la.createdAt > :createdAfter')
 			->setParameter('ipAddress', $ipAddress)
-			->setParameter('createdAfter', new DateTimeImmutable($this->trustedIpPeriod))
+			->setParameter('createdAfter', $now->modify($this->trustedIpPeriod))
 			->getQuery()
 			->getSingleScalarResult();
 	}
