@@ -528,7 +528,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$ipAddress = $this->httpRequest->getRemoteAddress();
 
 		if ($this->maxLoginAttempts <= 0 || !$ipAddress) {
-			return new LoginThrottleStatus(null, null);
+			return new LoginThrottleStatus(null, false, null);
 		}
 
 		$now = new DateTimeImmutable();
@@ -540,9 +540,10 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$trusted = $this->isTrustedForAccount($ipAddress, $username);
 
 		$remaining = null;
+		$blocked = false;
 		$blockedUntil = null;
 
-		$evaluate = function (int $used, int $limit, callable $expiresAt) use (&$remaining, &$blockedUntil, $since, $now): void {
+		$evaluate = function (int $used, int $limit, callable $expiresAt) use (&$remaining, &$blocked, &$blockedUntil, $since, $now): void {
 			if ($limit <= 0) {
 				return;
 			}
@@ -553,6 +554,11 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			if ($used < $limit) {
 				return;
 			}
+
+			// Over the limit is the whole decision - the unblock time below is only there to
+			// be shown. If those two were one value, a query that came back empty would turn
+			// a refused sign-in into an allowed one.
+			$blocked = true;
 
 			// The window slides, so the budget reopens once (used - limit + 1) of the oldest
 			// attempts have aged out of it - the one at offset (used - limit) is the last of them.
@@ -606,7 +612,7 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 			}
 		}
 
-		return new LoginThrottleStatus($remaining, $blockedUntil);
+		return new LoginThrottleStatus($remaining, $blocked, $blockedUntil);
 	}
 
 	/** Failed attempts in the current window, for one account and optionally one address. */

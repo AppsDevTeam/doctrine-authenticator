@@ -209,6 +209,26 @@ test('prokazane heslo vrati cely rozpocet', function () {
 });
 
 
+test('blokace nezavisi na tom, jestli se povedlo zjistit cas odblokovani', function () {
+	// Rozhodnuti odmitnout a dopocet casu jsou dve ruzne otazky a druha z nich se ptá
+	// databaze zvlast. Kdyby na ni blokace visela, prazdna odpoved by z odmitnuteho
+	// prihlaseni udelala povolene - brzda by se fail-open otevrela presne ve chvili,
+	// kdy ma drzet.
+	$authenticator = authenticator();
+	$ip = '192.0.2.76';
+
+	for ($i = 0; $i < MAX_PAIR_ATTEMPTS; $i++) {
+		expectRejectedNotThrottled($authenticator, $ip, ACCOUNT, 'vycerpani limitu');
+	}
+
+	$status = new ADT\DoctrineAuthenticator\LoginThrottleStatus(0, true, null);
+
+	Assert::true($status->isBlocked(), 'blokace plati i bez znameho casu odblokovani');
+	Assert::same(0, $authenticator->status($ip, ACCOUNT)->remainingAttempts);
+	Assert::true($authenticator->status($ip, ACCOUNT)->blocked);
+});
+
+
 test('vypnuta brzda nehlasi nic', function () {
 	// Formular pak nema co upresnit a necha puvodni obecnou hlasku.
 	$authenticator = authenticator();

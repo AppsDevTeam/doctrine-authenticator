@@ -317,9 +317,16 @@ it:
 $status = $authenticator->getLoginThrottleStatus($email);
 
 $status->remainingAttempts;  // ?int - attempts left, null when throttling is off
-$status->blockedUntil;       // ?DateTimeImmutable - when sign-in works again
-$status->isBlocked();
+$status->blocked;            // bool - is sign-in being refused right now?
+$status->blockedUntil;       // ?DateTimeImmutable - when it works again, null if unknown
+$status->isBlocked();        // === $status->blocked
 ```
+
+`blockedUntil` is deliberately not what `isBlocked()` reads. Whether to refuse
+a sign-in must not depend on whether the unblock moment could also be worked
+out - that is a second query, and if it came back empty the throttling would
+open exactly when it is supposed to hold. A caller that shows the time has to
+handle `blocked` without `blockedUntil`.
 
 It is the same code that decides whether to refuse a sign-in, not a second
 copy of the counters - a caller computing "one attempt left" on its own would
