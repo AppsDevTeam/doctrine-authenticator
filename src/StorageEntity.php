@@ -41,7 +41,8 @@ class StorageEntity
 	#[Column]
 	protected DateTimeImmutable $validUntil;
 
-	#[Column(length: 15, nullable: true)]
+	// 45 = nejdelsi textovy zapis IPv6 (IPv4-mapped), stejne jako AuthLog::$ip a LoginAttempt::$ipAddress
+	#[Column(length: 45, nullable: true)]
 	protected ?string $ip = null;
 
 	#[Column(nullable: true)]

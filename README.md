@@ -394,6 +394,19 @@ php bin/console doctrine-authenticator:clear-expired-sessions 30
 
 Run it periodically (e.g. via cron) to keep the `session` table clean.
 
+## Upgrading
+
+### `session.ip` holds IPv6 addresses
+
+`StorageEntity::$ip` used to be `VARCHAR(15)`, which only fits IPv4. A request
+from an IPv6 address then failed to create or extend the session (`Data too long
+for column 'ip'` in strict SQL mode). It is now `VARCHAR(45)`, the same as
+`AuthLog::$ip` and `LoginAttempt::$ipAddress`. Generate a migration, or add:
+
+```sql
+ALTER TABLE session MODIFY ip VARCHAR(45) DEFAULT NULL;
+```
+
 ## Tests
 
 ```bash
