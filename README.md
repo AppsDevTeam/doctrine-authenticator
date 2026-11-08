@@ -220,6 +220,14 @@ Just call `login` on security user as you are used to:
 $this->securityUser->login($email, $password);
 ```
 
+## Sliding expiration
+
+Each request with a valid token extends it to `now + expiration`. The new expiration is
+written only once it would move by at least `DoctrineAuthenticator::TOKEN_REFRESH_INTERVAL`
+(60 seconds) - otherwise every AJAX request or poll would write the `session` row (on a Galera
+cluster replicated to all nodes) just to move it by a few seconds. Unchanged IP and User-Agent
+are not written either, so most requests do not write at all.
+
 ## Country-based fraud detection
 
 The default fraud detection kills a session when both the IP and the

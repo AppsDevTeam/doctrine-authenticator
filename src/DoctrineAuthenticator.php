@@ -31,6 +31,9 @@ use DateTimeZone;
 abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 {
 	/** typy udalosti pro $onAuthEvent */
+	/** Seconds - a valid token moves its expiration only when it would move by at least this much */
+	public const TOKEN_REFRESH_INTERVAL = 60;
+
 	public const TYPE_LOGIN = 'login';
 	public const TYPE_LOGIN_FAILED = 'login_failed';
 	public const TYPE_LOGIN_BLOCKED = 'login_blocked';
@@ -372,10 +375,16 @@ abstract class DoctrineAuthenticator implements Authenticator, IdentityHandler
 		$realIdentity->setAuthToken($token);
 		$this->initIdentity($realIdentity, $storageEntity->getMetadata());
 
-		// Extend db token expiration and update IP and User Agent header
+		// Extend db token expiration and update IP and User Agent header. The expiration moves
+		// only once it would move by at least TOKEN_REFRESH_INTERVAL - otherwise every request
+		// would write (on a Galera cluster replicated to all nodes) just to shift it by seconds.
+		// Unchanged IP and User-Agent are not written either, flush() then does nothing.
 		$storageEntity->setIp($this->httpRequest->getRemoteAddress());
 		$storageEntity->setUserAgent($this->httpRequest->getHeader('User-Agent'));
-		$storageEntity->setValidUntil(new DateTimeImmutable('+' . $this->getExpiration($realIdentity)));
+		$validUntil = new DateTimeImmutable('+' . $this->getExpiration($realIdentity));
+		if ($validUntil->getTimestamp() - $storageEntity->getValidUntil()->getTimestamp() >= self::TOKEN_REFRESH_INTERVAL) {
+			$storageEntity->setValidUntil($validUntil);
+		}
 		$this->internalEm->flush();
 
 		// Extend cookie expiration

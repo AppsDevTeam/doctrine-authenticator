@@ -74,12 +74,15 @@ final class TestAuthenticator extends DoctrineAuthenticator
 	}
 
 	/** Prazdna databaze se schematem balicku. Soubor si vola zpatky ten, kdo ji zalozil. */
-	public static function createEntityManagerOn(string $dbFile): EntityManagerInterface
+	/**
+	 * @param list<string> $entityDirs entity mimo balicek (identita pro wakeupIdentity)
+	 */
+	public static function createEntityManagerOn(string $dbFile, array $entityDirs = [], bool $createSchema = true): EntityManagerInterface
 	{
 		// Rucne, ne pres ORMSetup: ten si chce nastavit cache a vyzadoval by symfony/cache
 		// jako dalsi zavislost jen kvuli testum.
 		$config = new Configuration();
-		$config->setMetadataDriverImpl(new AttributeDriver([__DIR__ . '/../../src']));
+		$config->setMetadataDriverImpl(new AttributeDriver([__DIR__ . '/../../src', ...$entityDirs]));
 		$config->setProxyDir(sys_get_temp_dir());
 		$config->setProxyNamespace('ADT\DoctrineAuthenticator\Tests\Proxies');
 		$config->setAutoGenerateProxyClasses(true);
@@ -92,7 +95,9 @@ final class TestAuthenticator extends DoctrineAuthenticator
 			$config,
 		);
 
-		new SchemaTool($em)->createSchema($em->getMetadataFactory()->getAllMetadata());
+		if ($createSchema) {
+			new SchemaTool($em)->createSchema($em->getMetadataFactory()->getAllMetadata());
+		}
 
 		return $em;
 	}
