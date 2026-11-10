@@ -55,12 +55,14 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 				throw new AuthenticationException('Identity ' . $user . ' not found.');
 			}
 
-			if (
-				!$this->verifyPassword($password, (string) $identity->getPassword())
-				&&
-				!$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
-			) {
-				throw new AuthenticationException('Wrong password for identifier ' . $user);
+			if (!$this->verifyPassword($password, (string) $identity->getPassword())) {
+				$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false);
+
+				// findToken() matches tokens without an identifier too (invitation, password recovery,
+				// sign in as), so without this check any user's token would sign in as anyone.
+				if (!$onetimeToken || !$this->isTokenFor($onetimeToken, $identity)) {
+					throw new AuthenticationException('Wrong password for identifier ' . $user);
+				}
 			}
 		}
 
@@ -69,6 +71,24 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 		$this->validateIdentity($identity, $context, $metadata);
 
 		return $identity;
+	}
+
+	/**
+	 * A token typed as the password must belong to the identity, or, without an owner,
+	 * be bound to the identifier it was found by.
+	 */
+	protected function isTokenFor(OnetimeToken $onetimeToken, Identity $identity): bool
+	{
+		$objectClass = $onetimeToken->getObjectClass();
+		if ($objectClass === null || $onetimeToken->getObjectId() === null) {
+			return $onetimeToken->getIdentifier() !== null;
+		}
+
+		// the token may have been saved from a Doctrine proxy, its class name is resolved to the entity
+		$entityClass = $this->em->getClassMetadata($objectClass)->getName();
+
+		return $identity instanceof $entityClass
+			&& (string) $onetimeToken->getObjectId() === (string) $identity->getId();
 	}
 
 	protected function initQueryObject(IdentityQuery $query, UserTypeEnum $userType, ?string $context = null, array $metadata = []): void
