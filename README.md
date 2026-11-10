@@ -404,6 +404,19 @@ Run it periodically (e.g. via cron) to keep the `session` table clean.
 
 ## Upgrading
 
+### A one-time token typed as the password signs in only its owner
+
+`OnetimeTokenAuthenticator` accepts a `LOGIN` token in the password field (e.g. a
+code sent to the user). It used to look the token up by the entered identifier
+**or without one**, and never checked whom the token belongs to. Tokens from
+invitation, password recovery and "sign in as" links have no identifier, so any
+valid token - including one an attacker got from their own registration e-mail -
+signed in as any e-mail address typed next to it. The token now has to belong to
+the identity found by the identifier (`objectClass` and `objectId`,
+`OnetimeTokenAuthenticator::isTokenOwnedBy()`), otherwise the sign-in fails as a
+wrong password. Links with `?token=` are not affected. Projects should upgrade and
+check their `session` table for sessions created with a token of another identity.
+
 ### `session.ip` holds IPv6 addresses
 
 `StorageEntity::$ip` used to be `VARCHAR(15)`, which only fits IPv4. A request

@@ -55,12 +55,14 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 				throw new AuthenticationException('Identity ' . $user . ' not found.');
 			}
 
-			if (
-				!$this->verifyPassword($password, (string) $identity->getPassword())
-				&&
-				!$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false)
-			) {
-				throw new AuthenticationException('Wrong password for identifier ' . $user);
+			if (!$this->verifyPassword($password, (string) $identity->getPassword())) {
+				$onetimeToken = $this->onetimeTokenService->findToken(OnetimeTokenTypeEnum::LOGIN, $password, $user, markAsUsed: false);
+
+				// findToken() matches tokens without an identifier too (invitation, password recovery,
+				// sign in as), so without this check any user's token would sign in as anyone.
+				if (!$onetimeToken || !$this->isTokenOwnedBy($onetimeToken, $identity)) {
+					throw new AuthenticationException('Wrong password for identifier ' . $user);
+				}
 			}
 		}
 
@@ -69,6 +71,16 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 		$this->validateIdentity($identity, $context, $metadata);
 
 		return $identity;
+	}
+
+	protected function isTokenOwnedBy(OnetimeToken $onetimeToken, Identity $identity): bool
+	{
+		$objectClass = $onetimeToken->getObjectClass();
+
+		return $objectClass !== null
+			&& $onetimeToken->getObjectId() !== null
+			&& $identity instanceof $objectClass
+			&& (string) $onetimeToken->getObjectId() === (string) $identity->getId();
 	}
 
 	protected function initQueryObject(IdentityQuery $query, UserTypeEnum $userType, ?string $context = null, array $metadata = []): void
