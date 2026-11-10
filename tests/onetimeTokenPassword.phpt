@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use ADT\DoctrineAuthenticator\OTP\OnetimeToken;
 use ADT\DoctrineAuthenticator\OTP\OnetimeTokenService;
 use ADT\DoctrineAuthenticator\OTP\OnetimeTokenTypeEnum;
 use ADT\DoctrineAuthenticator\Tests\Entity\TestOtpUser;
@@ -69,8 +70,14 @@ test('vlastni token funguje jako heslo', function () use ($authenticator, $token
 	Assert::same($victim->getId(), $identity->getOnetimeToken()?->getObjectId());
 });
 
-test('token bez vlastnika nefunguje jako heslo', function () use ($authenticator, $tokens, $validUntil) {
+test('token bez vlastnika s identifikatorem funguje jako heslo k tomu identifikatoru', function () use ($authenticator, $tokens, $victim, $validUntil) {
 	$token = $tokens->saveToken(OnetimeTokenTypeEnum::LOGIN, $validUntil, identifier: 'victim@example.com', checkLimit: false);
+
+	Assert::same($victim, $authenticator->authenticate('victim@example.com', $token));
+});
+
+test('token bez vlastnika i identifikatoru nefunguje jako heslo', function () use ($authenticator, $tokens, $validUntil) {
+	$token = $tokens->saveToken(OnetimeTokenTypeEnum::LOGIN, $validUntil, checkLimit: false);
 
 	Assert::exception(
 		fn() => $authenticator->authenticate('victim@example.com', $token),
@@ -78,8 +85,24 @@ test('token bez vlastnika nefunguje jako heslo', function () use ($authenticator
 	);
 });
 
+test('token ulozeny z Doctrine proxy funguje jako heslo vlastnika, ne ciziho e-mailu', function () use ($authenticator, $tokens, $em, $victim, $validUntil) {
+	$token = $tokens->saveToken(OnetimeTokenTypeEnum::LOGIN, $validUntil, $victim, checkLimit: false);
+	$metadata = $em->getClassMetadata(OnetimeToken::class);
+	$em->getConnection()->executeStatement(
+		sprintf('UPDATE %s SET %s = ? WHERE %s = ?', $metadata->getTableName(), $metadata->getColumnName('objectClass'), $metadata->getColumnName('token')),
+		['Proxies\\__CG__\\' . TestOtpUser::class, hash('sha256', $token)],
+	);
+	$em->clear();
+
+	Assert::exception(
+		fn() => $authenticator->authenticate('attacker@example.com', $token),
+		AuthenticationException::class,
+	);
+	Assert::same($victim->getId(), $authenticator->authenticate('victim@example.com', $token)->getId());
+});
+
 test('token z odkazu prihlasi svou identitu', function () use ($authenticator, $tokens, $attacker, $validUntil) {
 	$token = $tokens->saveToken(OnetimeTokenTypeEnum::LOGIN, $validUntil, $attacker, checkLimit: false);
 
-	Assert::same($attacker, $authenticator->authenticate($token));
+	Assert::same($attacker->getId(), $authenticator->authenticate($token)->getId());
 });

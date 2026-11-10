@@ -412,8 +412,9 @@ code sent to the user). It used to look the token up by the entered identifier
 invitation, password recovery and "sign in as" links have no identifier, so any
 valid token - including one an attacker got from their own registration e-mail -
 signed in as any e-mail address typed next to it. The token now has to belong to
-the identity found by the identifier (`objectClass` and `objectId`,
-`OnetimeTokenAuthenticator::isTokenOwnedBy()`), otherwise the sign-in fails as a
+the identity found by the identifier (`objectClass` and `objectId`, a Doctrine
+proxy class name is resolved to the entity), a token without an owner has to be
+bound to that identifier (`OnetimeTokenAuthenticator::isTokenFor()`), otherwise the sign-in fails as a
 wrong password. Links with `?token=` are not affected. Projects should upgrade and
 check their `session` table for sessions created with a token of another identity.
 

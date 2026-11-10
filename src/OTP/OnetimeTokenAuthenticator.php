@@ -60,7 +60,7 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 
 				// findToken() matches tokens without an identifier too (invitation, password recovery,
 				// sign in as), so without this check any user's token would sign in as anyone.
-				if (!$onetimeToken || !$this->isTokenOwnedBy($onetimeToken, $identity)) {
+				if (!$onetimeToken || !$this->isTokenFor($onetimeToken, $identity)) {
 					throw new AuthenticationException('Wrong password for identifier ' . $user);
 				}
 			}
@@ -73,13 +73,21 @@ class OnetimeTokenAuthenticator extends DoctrineAuthenticator
 		return $identity;
 	}
 
-	protected function isTokenOwnedBy(OnetimeToken $onetimeToken, Identity $identity): bool
+	/**
+	 * A token typed as the password must belong to the identity, or, without an owner,
+	 * be bound to the identifier it was found by.
+	 */
+	protected function isTokenFor(OnetimeToken $onetimeToken, Identity $identity): bool
 	{
 		$objectClass = $onetimeToken->getObjectClass();
+		if ($objectClass === null || $onetimeToken->getObjectId() === null) {
+			return $onetimeToken->getIdentifier() !== null;
+		}
 
-		return $objectClass !== null
-			&& $onetimeToken->getObjectId() !== null
-			&& $identity instanceof $objectClass
+		// the token may have been saved from a Doctrine proxy, its class name is resolved to the entity
+		$entityClass = $this->em->getClassMetadata($objectClass)->getName();
+
+		return $identity instanceof $entityClass
 			&& (string) $onetimeToken->getObjectId() === (string) $identity->getId();
 	}
 
